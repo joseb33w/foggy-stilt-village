@@ -4558,6 +4558,20 @@
     }
    ],
    "once": true
+  },
+  {
+   "id": "mp_respawn",
+   "when": {
+    "event": "player_died"
+   },
+   "then": [
+    {
+     "toast": "The marsh takes you... and gives you back."
+    },
+    {
+     "respawn": true
+    }
+   ]
   }
  ],
  "director": {
@@ -4612,5 +4626,11 @@
    "model": "props/kk_rpgtools/torch.glb"
   }
  },
- "start_weapon": "rusty_sword"
+ "start_weapon": "rusty_sword",
+ "multiplayer": {
+  "enabled": true,
+  "max_players": 6,
+  "supabase_url": "https://xhhmxabftbyxrirvvihn.supabase.co",
+  "supabase_anon_key": "sb_publishable_NZHoIxqqpSvVBP8MrLHCYA_gmg1AbN-"
+ }
 }

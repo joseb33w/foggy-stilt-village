@@ -6,13 +6,20 @@ tall heron folk who live there, step inside the elder's hut — and pay your
 respects to Old Murk, the enormous ancient catfish asleep in the pool under the
 great pier.
 
-**Play:** https://preview.myapping.com/cloud-do09d2jdlpivbwyjcag8/index.html
+**Play:** https://preview.myapping.com/cloud-iybqouv5yf6dymalatmc/index.html
 
 ## How to play
 - **Move:** left-side touch joystick (or WASD)
 - **Look:** drag the right side of the screen (or mouse)
 - **Talk / open / interact:** USE button (walk up to a heron first)
 - **Jump:** JUMP button (or Space)
+
+## Multiplayer
+The village is shared: everyone who opens the same game link lands in the same
+room (up to 6 players) and sees each other wandering the boardwalks — position,
+facing, and hits all sync over Supabase Realtime. Sign-in (email + password) is
+required so friends are identifiable; the session is remembered across
+launches. For a private room, add `?room=<code>` to the link and share it.
 
 The quest log follows *Village of Stilts*: meet Elder Sedge by the great hut,
 take the heron charm from inside it, walk the great pier, and whisper a greeting
@@ -24,7 +31,9 @@ to Old Murk below the boards. Five named places toast as you discover them.
 - Data-driven world on the `godot-tmpl-rpg` engine: everything that defines the
   place lives in `world.json` (chunk-streamed 8×8 grid, terrain + swamp water +
   fog weather, parametric stilt huts, one enterable interior) and `quests.json`.
-  No game-authored scripts — the build is native-player streamable.
+  No game-authored scripts — the build is native-player streamable. Multiplayer
+  is likewise pure data: a `multiplayer` block in `world.json` switches on the
+  engine's own netcode (Supabase Realtime broadcast over `WebSocketPeer`).
 - Characters (three heron villagers, the wanderer, the giant catfish) are
   Meshy-generated, rigged, web-optimized GLBs in `models/meshy/`, streamed at
   runtime (never packed into the `.pck`).
