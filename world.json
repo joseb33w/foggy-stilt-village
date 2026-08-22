@@ -4558,20 +4558,6 @@
     }
    ],
    "once": true
-  },
-  {
-   "id": "mp_respawn",
-   "when": {
-    "event": "player_died"
-   },
-   "then": [
-    {
-     "toast": "The marsh takes you... and gives you back."
-    },
-    {
-     "respawn": true
-    }
-   ]
   }
  ],
  "director": {
@@ -4598,7 +4584,7 @@
     0.04,
     0.06,
     0.05,
-    0.94
+    1.0
    ]
   },
   "modes": [

@@ -1,149 +1,54 @@
-# QA REPORT — HERONWADE (peaceful exploration, godot-tmpl-rpg chunk world)
+# QA Report — foggy-stilt-village, multiplayer CONTINUE change
+**Scope:** data-only delta (world.json `multiplayer` block, `mp_respawn` rule, model-path rebase, README) on the already-shipped HERONWADE build. Export: /workspace/repo/out, served locally (two runs: plain + production-shaped `/cloud-iybqouv5yf6dymalatmc/` prefix with `/godot-assets/` CDN-proxied). Signed in through the REAL gate UI via Supabase-HTTP-over-Node (existing test account; no new accounts created).
 
-**VERDICT: PASS (0 P0 · 3 P1 must-fix · 7 warns)**
+## VERDICT: FAIL (0 P0, 1 P1 must-fix)
 
-The build is content-complete, boots clean, is winnable end-to-end through the real input
-paths, and the fantasy reads: foggy stilt village, heron people, ochre-coat wanderer, giant
-sleeping catfish. No ship-blocker class found (no T-pose, no moonwalk, no gray-box world, no
-dead quest, no console errors, no letterbox, world persists at its edge). Three P1s below are
-authoring/wiring bugs the player will notice — fix before ship.
-
-Evidence: screenshots in `/workspace/verify/qa/` (referenced below), harness log
-`/tmp/verify.log` (VERIFY PASSED), headless probe transcripts (real game process,
-`interaction.try_use()` / real quest system — no test-only shortcuts).
+The delta is largely sound — sign-in, netcode config, model rebase, winnability, and normal play all verified green — but the change's own headline feature (`mp_respawn`: "real death + respawn instead of silent auto-heal") empirically delivers a **blocking full-screen DEFEATED modal on top of the already-respawned player**, contradicting the rule's intent and the engine's stated non-modal design. Fix (or consciously accept/revert the rule) before deploy.
 
 ---
 
-## ❗ P1-1 — All `regions[]` circles are offset (−8,−8) from the world content
+## ❗ P1 — player death shows a permanent blocking "DEFEATED / TRY AGAIN" modal over an already-respawned, healed player
+**Evidence (empirical, real damage path):** I hot-injected a QA rule via the game's own 4s world.json poll (served modified data from my test server — repo untouched): `{damage: 9999}` on `time_of_day_changed`, tripped with the engine's `gogiSetTime` hook. Console: `GOGI_RULE_FIRED qa_kill` → `GOGI_RULE_FIRED mp_respawn on=player_died`. Screenshots `verify/qa11_death.png` / `qa12_after_death.png`: the mp_respawn toast "The marsh takes you... and gives you back." renders at the top **while a full-screen DEFEATED modal covers the game**, and it never clears — held-W movement after 4s+ = **0.00 m** (input blocked). Clicking TRY AGAIN recovers (7.7 m movement after, `qb2_after_try_again.png`) but runs `main.restart_run()` — a **full run reset** (vars, rule state, opening sequence), not a respawn.
 
-**Symptom (verified live):** standing at the actual village square centre (40, 41.8) shows
-**PLACES SEEN 0** (shot `41_square_t30.png`); the toast only fires ~3 m further west (shot
-`43_talk_elder.png`). Worse, **"The Elder's Hut" region can never fire at or inside the elder's
-hut** — it fired at (28.9, 22.4), open mud next to a *different* hut (shot `07_hut_door.png`
-shows the "The Elder's Hut" toast over the wrong building). "Old Murk's Pool" cannot fire on
-the natural swim line from the pier end (z≈40): min distance to its centre (94,32) along that
-line is exactly 8.0 = its radius (strict `d < radius` in `game_shell._update_region`); it only
-fired when I approached from the south at (93.3, 36.6) (shot `82_pool.png`). "The Reed Road"
-does not cover the spawn point (11.3 m > r10) — a player walking straight east never gets it.
+**Root cause (code order, pre-existing engine files):** `main.gd::take_damage()` (~line 1280, same pattern in `set_player_health()` ~1414): `director.fire("player_died")` runs the rule **synchronously first** — `mp_respawn`'s `respawn` calls `respawn_player(true)` → `clear_defeat()`, which no-ops because `game_shell._lost` is still false — and **then** `_show_defeat()` puts the modal up with nothing left to clear it. `game_shell.clear_defeat()`'s own comment says a world answering `player_died` with `respawn` must not keep the modal ("Leaving the modal up over a living, moving player is wrong in any world that respawns") — the call ordering defeats that design.
 
-**Root cause:** region `center`s (authored in world.json) assume cell centre = `cell*16`
-(e.g. Village Square [32,32] for cell (2,2)), but the engine centres cells at `cell*16 + 8`
-(`chunk_manager.gd:656/958` — confirmed: player spawns at (8,40) for start_cell [0,2]; Elder
-Sedge registers at (36.5, 42.6), chest at (33.5,33.5), door at (37.2,38.8)). Every region is
-therefore ~11.3 m SW of its content. All five region rules DO fire correctly when their
-(misplaced) circles are entered — proven live: seen_gate (verify run), seen_square + seen_hut,
-seen_pier (`80_pier.png`), seen_pool + murk_stir subtitle + shake (`82_pool.png`), so this is
-purely a placement fix.
+**Reachability:** this world has no single-player damage sources, so it only fires on multiplayer PvP hits (`netsync.hit_taken` → `take_damage`) — i.e. exactly the mode this change ships. README explicitly advertises "hits all sync."
 
-**Fix:** add +8,+8 to all five region centers (and consider nudging "Old Murk's Pool" onto the
-catfish at (102,40)). Re-check the terrain `features` too — same coordinate assumption; today
-the canyon (x 91..101) happens to work, but Old Murk (102,40) landed ~1 m *outside* it on the
-east bank (0.94 m shallows — visually fine, see P1-3/notes).
+**Fix direction (coordinator's choice):**
+- Engine fix (1 line-ish, main.gd): call `_show_defeat()` **before** `director.fire("player_died")` so a rule's `respawn` clears it; or suppress `_show_defeat()` when the world's `player_died` rules contain a `respawn` action.
+- Data-only fallback: drop the `mp_respawn` rule — `wants_death()` reverts to false and the engine's non-modal heal-in-place + strong hurt-flash returns (pre-change shipped behavior). Loses the "real death" feature but ships clean.
+- Do NOT ship as-is: a PvP death = blocked screen + run-resetting button.
 
-## ❗ P1-2 — Quest objectives are never shown on the HUD
+## ⚠️ Warns / observations (not ship-blockers)
+- **Uncommitted delta:** the repo has NO `feat/multiplayer` branch — the change exists only as uncommitted working-tree edits on `main` (`git status`: M world.json/README/PLAN + 2 untracked .import files). Commit/push before deploy or the change ships from nowhere.
+- **Region banner overlaps quest log (portrait):** "The Reed Road" title renders across the quest-log's 4th line (`qa6_moved.png`, also in the pre-existing `game0.png`). Cosmetic, pre-existing, portrait only.
+- **Canonical verify FAIL disposition — CONFIRMED SOUND:** `verify.mjs` exits 1 solely on "RULE LAYER NEVER RAN" because the generic harness can't type into the sign-in gate. Auth-aware runs prove the layer alive in real play: `start_amb`, `seen_gate` fired in normal wandering; `mp_respawn` fired on a driven death; `GOGI_RULES loaded vars=1 rules=10`. Harness limitation, not a game bug.
+- **Audio:** infra present (verify: AudioManager/players/bus OK), `start_amb` ambient rule fired; actual playback unverifiable in the muted container.
+- **Localhost-only placeholder noise:** serving out/ WITHOUT the CDN, shared props (`/godot-assets/props/...` torch/trees/bushes/rocks) 404 → gray placeholders. All 10 such paths return **200 from preview.myapping.com** (curl-verified) and render correctly when proxied (`qb1_game_prod_assets.png`: trees, bushes, logs, torch-in-hand). Environment artifact of local serving, not a build defect — listed so nobody re-flags it.
 
-**Symptom:** the auto-started quest "Village of Stilts" has **no visible objective text at any
-point** — confirmed in every screenshot of every session (no quest line anywhere). The player
-gets no "Find Elder Sedge…" guidance; only region toasts.
+## ✅ Verified green (real deltas, real renders)
+| Check | Evidence |
+|---|---|
+| Sign-in gate appears, correct copy | `qa2_gate.png` — "Sign in to play / saves your progress and plays with others", email+password, eye-toggle, Create one, Forgot password |
+| Error states legible | Empty submit → "Enter a valid email address."; wrong password → red "Invalid login credentials" (`qa3_gate_error.png`); recovery to successful sign-in in same session |
+| Auth passes via real UI | `GOGI_AUTH signed in uid=3f6dbd7c…` → `gate passed`; Supabase HTTP proxied through Node (container TLS block is env-only) |
+| Session persistence | Page reload → `GOGI_AUTH restored existing session — no prompt` (no second login) |
+| Multiplayer config live | `GOGI_MP enabled max_players=6`; `GOGI_MP resolved map=- room=cloud-iybqouv5yf6dymalatmc` (build-derived room under production path shape; empty-room in run 1 was my server serving at `/` — artifact) |
+| Netsync doesn't degrade SP play | wss blocked in-container → only `[Net]` warnings; zero real console errors across both runs; movement/rules/quests all functional with netsync running |
+| Realtime transport (from Node) | Re-ran nettest.mjs with world.json's exact URL+anon key: both clients SUBSCRIBED to `game:cloud-iybqouv5yf6dymalatmc-nettest`, A received B's broadcast — PASS |
+| Model rebase (change 3) | All 5 refs `/cloud-iybqouv5yf6dymalatmc/models/meshy/*.glb` ↔ files in out/models/meshy/ match; wanderer + heron_villager fetched+rendered in-game; `GOGI_HERO native avatar attached (char_h=1.729)`; **zero GOGI_PLACEHOLDER / zero 404** in the production-shaped run |
+| Meshy characters render (no gray boxes) | `qa7_npc.png` / `qa9_day.png`: textured yellow-coat wanderer (animating, feet grounded, `GOGI_HERO_SEAT 0.005`), dark heron NPC beside him |
+| Movement + camera | Held W = 9.4 m real position delta; right-half drag = 1.33 rad cam_yaw delta (orbit works, no floor-stare) |
+| NPC interaction | Walked to Pelli (12.8 m → 1.5 m), prompt "USE > Talk to Pelli", `try_use()` fired talk → 2 requests to npc.myapping.com (brain+speak) |
+| Quest log + HUD | Village of Stilts 4-step log, minimap, region banner, PLACES SEEN counter (increments 0→1), JUMP/USE, HP/XP/Gold bar all present |
+| mp_respawn well-formed | Static: `GOGI_RULES loaded rules=10`, rule fires on event, toast + respawn actions execute (the modal issue above is engine ordering, not rule syntax) |
+| Winnability | Canonical verify: "quest-graph OK — world is winnable (project world.json, 64 areas)" — unchanged by delta |
+| Night/day both readable | `qa8_night.png` (deep blue, boardwalk + hero readable, not black) / `qa9_day.png` (no blow-out; luma clipped=0.0% in verify log) — driven deterministically via gogiSetTime |
+| Mobile fill | Portrait 390×844 + landscape 860×400 both fill all corners, HUD inside rect, no letterboxing (`qa10_landscape.png`) |
+| Native tier | manifest.json: `webOnly: false`, world.json present — native-playable |
+| Packaging / budget / scenes | Canonical: pck 5.1MB OK, scene pass 35/0, GPU peak 51MB/220MB budget, console clean |
 
-**Root cause:** `game_shell.gd` — `_quest_lbl.visible = true` only inside the mode-`chain`
-branch of `_apply_mode()` (line ~532), and `_refresh_quest_lbl()` early-returns when
-`_chain.is_empty()`. This world's `wander` mode has no `chain`, so the label stays hidden
-forever even though `quest.current_objective()` returns the correct live checklist (verified
-headless: text updates step-by-step through all four steps).
+## Could not verify (sandbox limits)
+In-engine wss to Supabase from Chromium (container TLS block — transport proven from Node instead); real 2-device peer rendering (peer_body spawn/cull paths untested live); real audio playback; true-GPU fidelity; touch feel. World-boundary/streaming persistence not re-walked — pre-existing shipped content, unchanged by this data-only delta.
 
-**Fix:** show/refresh `_quest_lbl` whenever any quest is active (drop the `_chain` gate), or
-author the quest as a 1-stage mode chain.
-
-## ❗ P1-3 — Skerrin (the pier fisher) stands half-submerged in the channel, not on the pier
-
-**Symptom (shot `81_pier_end_look.png`):** the flagship pier NPC wades waist-deep in the water
-beside the pier ("USE > Talk to Skerrin" over open water). His registered position is
-(92.8, −2.34, 40.5) — the channel bed, ~2 m below water level (−0.3). The request's "heron
-people stand around on the docks" degrades for exactly the NPC placed on the Great Pier.
-(Elder + villagers on the square ground are fine.)
-
-**Root cause:** NPC placement grounds to terrain height (`chunk_manager` `npos.y = _ground_y`),
-ignoring the elevated pier deck above; his authored spot is over the carved channel.
-
-**Fix:** ground NPCs via a physics ray (hit the deck collider), or move Skerrin's `pos` west
-onto the plank run (x ≤ 88) where deck ≈ terrain.
-
----
-
-## ⚠️ Warns / polish (P2)
-
-1. **Streaming pop-in / late dressing.** At container fps (4–8, software GL) the village
-   dresses 30–60 s behind a walking player: shot `40_square_t0.png` = player standing at the
-   square in a white void; `41_…t30` ground+huts; `42_…t60` fully dressed with NPCs. Builds are
-   per-frame so this scales with fps (a phone sees seconds, not a minute), but quest-critical
-   interactables (elder/chest/door) only register when their cell dresses. Recommend building
-   the player's own cell's interactables first. (Related real hitch: **FEEL perf worst frame
-   283 ms** while streaming — device-independent, will stall a phone frame; slice the heavy
-   cell-dressing phase further.)
-2. **Combat stats + red HP bar leak into the first minutes** of a combat-free game (shots
-   `20_square.png`, `40_square_t0.png`; faint on the title screen `01_title.png`). The
-   `hud_hide` start rule only fires at `world_ready` → after the spawn ring builds (fps-scaled
-   delay). Headless confirms they hide correctly once the rule runs. Fix: apply
-   `director.hide_hud` at HUD build time, not only at the start event.
-3. **Wandering villagers body-block the elder hut doorway** (shot `61_door.png`: a populate
-   NPC standing in the open doorway) and walkway furniture (post rows / drying racks / torches)
-   creates pinch pockets — my driver got physically wedged twice (e.g. (55.5, 41.2) between
-   plank, post row and hut roof eave). A human can steer around/wait, but consider keeping
-   `populate` wanderers out of the door zone and dropping colliders on minor posts.
-4. **Spawn-area boardwalk reads derelict:** ground-conformed planks lie at jumbled angles with
-   gaps (shot `02_spawn.png`) rather than a continuous raised walkway; mid-village sections on
-   stilts look correct (shots `48_pier.png`, `55_portrait.png`). Fine if "rickety" is intended.
-5. **Old Murk placement nuance:** he sleeps ~8 m east of the pier end on the far bank in 0.9 m
-   shallows — reads beautifully (shots `83_at_murk.png`, `85_edge.png`) but is "beside", not
-   "under", the pier, and the murk_stir subtitle can be missed entirely on the direct swim
-   (see P1-1).
-6. **kk_furniture GLBs re-fetched per placement** (bed/table/etc. requested 7× each; browser
-   cache absorbs it — resource audit in `/tmp/qa_drive3.log`).
-7. **Local-serve model 404s:** absolute `/cloud-…/models/*.glb` paths 404 on a bare local
-   server before the engine's self-heal re-roots them (it did; models loaded). The live host
-   serves all model URLs 200 (curl-verified) — env noise, not a build defect.
-
----
-
-## ✅ What passed (with the evidence that would have turned red)
-
-| # | Check | Evidence |
-|---|-------|----------|
-| 1 | Boot → tap → title "HERONWADE" (kicker/tagline/hints) → WANDER starts | `01_title.png`; game starts, `__gogiPlayer` live |
-| 2 | Console clean (no GDScript/JS errors) | verify PASS + 4 QA sessions (only the env-noise 404s above) |
-| 3 | Player: ochre-raincoat wanderer, torch in hand, ~1.65 m, animates (idle/walk/run/jump/swim clips present) | `02_spawn.png`, `41…`, swim=true at pier; GLB audit |
-| 4 | Facing: S→face, W→back (no moonwalk) | `03_face_S.png` / `04_back_W.png` |
-| 5 | Camera orbit: right-half drag | cam_yaw 0→1.44 rad (numeric) + pixel change (verify) |
-| 6 | Movement: WASD works; keyboard+joystick paths share one input vector (`main.gd _keyboard_vec + move_vec`) | all traversal legs; verify move probe |
-| 7 | Village richness: 12 authored huts (counted in world.json), timber walls + thatch roofs + warm windows, boardwalk + stilt posts, mud ground with texture, dense scatter, fog sky (grey mist, not void/red) | `42_square_t60.png`, `43…`, `48_pier.png`, `63_chest.png` |
-| 8 | Heron NPCs: tall/thin/long-beaked/hunched, textured Meshy models (villager/elder/fisher), idle+walk anims, sane scale (~2 m vs 1.65 m player), no T-pose, no flat-tint blobs | `43_talk_elder.png`, `61_door.png`, `63_chest.png`, `81…` |
-| 9 | Talk path: `USE > Talk to Elder Sedge` prompt in range; talk advances quest (talked.elder_sedge, talks counter +1) | `43_talk_elder.png` + headless probe (real `try_use`) |
-| 10 | NPC speech is voice-only by design (TTS/LLM via npc.myapping.com; endpoint reachable — /chat responds); quest advance does NOT depend on it | code path + headless |
-| 11 | Enterable hut: hinged door on the walkway face (door_face "n" = +Z = boardwalk side), opens/closes via USE, lit interior, furniture GLBs fetched, chest inside | `61_door.png` ("Close Door"), `62_interior.png` (player inside lit doorway), headless: door at (37.2,38.8) |
-| 12 | Chest → heron_charm + 10 gold, `charm_note` toast rule fires, quest step ✓ | headless: charm=true gold=10, fired=[…charm_note] |
-| 13 | Reach c5_2 quest step on entering the pier cell | headless + live (`80_pier.png` toast) |
-| 14 | Old Murk: giant 7 m mossy catfish (GLB 4×1.65×7 m), visible above the waterline beside the pier, not floating, `USE > Talk to Old Murk`, talk completes step | `83_at_murk.png`, `84_talk_murk.png`, `85_edge.png`; headless talked.old_catfish |
-| 15 | Full completion: quest → done, `fog_settled` flag, `all_done` panel **"THE FOG FEELS LIKE HOME"** visible | headless tree assertion (panel Label visible) |
-| 16 | Regions/toasts/counter: all five `enter_region` rules + PLACES SEEN increments + murk_stir subtitle + shake fire (at the offset positions — see P1-1) | `43…`, `80…`, `82_pool.png`, `07…` |
-| 17 | World persistence/boundary: invisible border wall at x=112, ray blocked at 111.5, live walk stopped at x=111.0 with the world (catfish/pier/huts) still rendered behind | headless probe + `85_edge.png` |
-| 18 | Mobile fill: portrait 400×860 and landscape 860×400 — canvas == viewport exactly, HUD (JUMP/USE, PLACES SEEN, minimap) inside, no overlap, no letterbox | `55_portrait.png`, `56_landscape.png`, DIMS logs |
-| 19 | HUD: combat controls hidden (attack/weapon/potion/stable/cycle absent; JUMP+USE only), no debug text (after start rule — see warn 2) | all in-game shots |
-| 20 | Day/night lighting: night readable (blue moonlight, player/trees distinct), day not clipped (harness luma: night mean 49, day max 255 clipped 0.0%) | `luma-night.png`, `luma-day.png` (deterministic gogiSetTime probe) |
-| 21 | Winnability gate: qgcheck green (64 areas, world winnable); scene-instantiation 35/35; packaging OK | `/tmp/verify.log` |
-| 22 | Native tier: chunk `world.json` + manifest `webOnly:false` → iOS-playable | `out/manifest.json` |
-| 23 | Audio presence: AudioManager + bus layout + mystical.ogg/crickets.ogg/wind.ogg shipped; rules wire ambient crickets at start, director music "mystical", fog weather wind bed | files in `out/audio/`, verify audio-infra OK |
-| 24 | Meshy mandate: player + all 4 NPC characters + catfish are Meshy assets (meshy_assets.jsonl, all match:PASS); library GLBs only for props/furniture | model audit |
-| 25 | Input-binding sanity: no fire/attack bound anywhere (no combat); look = right-half drag only; USE/JUMP are discrete buttons | project.godot (no [input] fire), HUD |
-
-**Sandbox limits (could not verify here):** real audio playback (muted container), live TTS/LLM
-reply content on-device, true-GPU visual fidelity (software GL renders paler/rougher — fog
-density and mud texture judged only approximately), touch feel, real-iOS native runtime.
-Note: several long Chromium sessions had the tab die mid-run (likely SwiftShader/container
-memory, not reproducible via any game action; verify's own 4-min session and one 14-min session
-survived) — flagging only as an observation, not a defect.
-
-**Verify harness:** `node verify.mjs /workspace/out /workspace` → **VERIFY PASSED** (WARNs:
-no roads[] — correct for a swamp village with boardwalk `rows`; flat-tint static lint — visually
-disproven, characters render textured; 283 ms worst frame — filed as warn 1; 7/9 rules not fired
-in the harness's short session — all fired across my sessions).
+**Test account used:** the coordinator-supplied `verify-cloud-iybqouv5yf6dymalatmc@example.com` only; no new accounts created. My artifacts: `/workspace/verify/qa-probe.mjs`, `qa-probe2.mjs`, `qa*.png`, `qb*.png`. Repo untouched.
