@@ -876,7 +876,7 @@
     "lines": [
      "Pelli: You walked the reed road? Nobody walks the reed road!"
     ],
-    "model": "/cloud-do09d2jdlpivbwyjcag8/models/heron_villager.glb"
+    "model": "/cloud-iybqouv5yf6dymalatmc/models/meshy/heron_villager.glb"
    }
   },
   {
@@ -2171,7 +2171,7 @@
     "lines": [
      "Elder Sedge: Mind the planks, stranger \u2014 the fog hides the gaps."
     ],
-    "model": "/cloud-do09d2jdlpivbwyjcag8/models/heron_elder.glb"
+    "model": "/cloud-iybqouv5yf6dymalatmc/models/meshy/heron_elder.glb"
    },
    "chest": {
     "pos": [
@@ -2186,8 +2186,8 @@
    "populate": [
     {
      "set": [
-      "/cloud-do09d2jdlpivbwyjcag8/models/heron_villager.glb",
-      "/cloud-do09d2jdlpivbwyjcag8/models/heron_fisher.glb"
+      "/cloud-iybqouv5yf6dymalatmc/models/meshy/heron_villager.glb",
+      "/cloud-iybqouv5yf6dymalatmc/models/meshy/heron_fisher.glb"
      ],
      "count": 2,
      "vary": true,
@@ -2913,7 +2913,7 @@
     "lines": [
      "Moorwick: Fog rots the nets faster than the water does."
     ],
-    "model": "/cloud-do09d2jdlpivbwyjcag8/models/heron_fisher.glb"
+    "model": "/cloud-iybqouv5yf6dymalatmc/models/meshy/heron_fisher.glb"
    }
   },
   {
@@ -3982,13 +3982,13 @@
     "lines": [
      "Skerrin: Quiet now \u2014 Old Murk's sleeping under the pier."
     ],
-    "model": "/cloud-do09d2jdlpivbwyjcag8/models/heron_fisher.glb"
+    "model": "/cloud-iybqouv5yf6dymalatmc/models/meshy/heron_fisher.glb"
    },
    "populate": [
     {
      "set": [
-      "/cloud-do09d2jdlpivbwyjcag8/models/heron_villager.glb",
-      "/cloud-do09d2jdlpivbwyjcag8/models/heron_fisher.glb"
+      "/cloud-iybqouv5yf6dymalatmc/models/meshy/heron_villager.glb",
+      "/cloud-iybqouv5yf6dymalatmc/models/meshy/heron_fisher.glb"
      ],
      "count": 3,
      "vary": true,
@@ -4267,7 +4267,7 @@
     "lines": [
      "Old Murk: ...mmh... the water remembers..."
     ],
-    "model": "/cloud-do09d2jdlpivbwyjcag8/models/giant_catfish.glb"
+    "model": "/cloud-iybqouv5yf6dymalatmc/models/meshy/giant_catfish.glb"
    }
   },
   {
@@ -4403,8 +4403,8 @@
    ]
   }
  ],
- "hero_model": "/cloud-do09d2jdlpivbwyjcag8/models/wanderer.glb",
- "default_npc_model": "/cloud-do09d2jdlpivbwyjcag8/models/heron_villager.glb",
+ "hero_model": "/cloud-iybqouv5yf6dymalatmc/models/meshy/wanderer.glb",
+ "default_npc_model": "/cloud-iybqouv5yf6dymalatmc/models/meshy/heron_villager.glb",
  "vars": {
   "explored": {
    "init": 0,
@@ -4584,7 +4584,7 @@
     0.04,
     0.06,
     0.05,
-    0.94
+    1.0
    ]
   },
   "modes": [
@@ -4612,5 +4612,11 @@
    "model": "props/kk_rpgtools/torch.glb"
   }
  },
- "start_weapon": "rusty_sword"
+ "start_weapon": "rusty_sword",
+ "multiplayer": {
+  "enabled": true,
+  "max_players": 6,
+  "supabase_url": "https://xhhmxabftbyxrirvvihn.supabase.co",
+  "supabase_anon_key": "sb_publishable_NZHoIxqqpSvVBP8MrLHCYA_gmg1AbN-"
+ }
 }

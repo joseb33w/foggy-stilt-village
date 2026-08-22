@@ -1,71 +1,59 @@
-# HERONWADE — Game-Feel / Mobile-UX Review
+# Game-Feel / Mobile-UX Report — Heronwade `feat/multiplayer` (CONTINUE: multiplayer + auth gate + respawn rule)
 
-**VERDICT: FAIL (1 P0)** — the elder's hut cannot be entered, so quest step 2 (heron charm) and therefore the world goal `complete_quest: village_of_stilts` are unreachable.
+**VERDICT: FAIL (0 P0, 3 P1)**
 
-Method: drove the actual web export headless (SwiftShader Chromium, `hasTouch` CDP touch events only — no keyboard for gameplay) at phone portrait **390×844** and landscape **844×390**, DPR-independence confirmed via the engine's short-side scale (viewport 720×1558 at both DPRs). ~10 full sessions, spawn → elder → hut door → pier → Old Murk, with `window.gogiGetPlayer()` telemetry and `window.gogiSolids()` collider probes. ~45 screenshots reviewed (kept in `/tmp/feel/*.png`). The live preview URL serves an app-install interstitial to mobile UAs, so runs used the local export with `/godot-assets/*` proxied from the preview host (real props load; only hut-interior furniture GLBs fall back to placeholders in-sandbox — absolute same-origin URLs, fine in production).
+Scope per delegation: the NEW surfaces only (boot/auth flow, sign-in form, post-sign-in sanity, respawn toast) at **390×844 portrait**. Verified by driving the real export (`/workspace/repo/out`, served locally) headless with **touch input** (Playwright `touchscreen` + CDP touch drags), Supabase proxied through Node per the known sandbox gotcha. Real sign-in with the verify account **succeeded through the actual touch-driven form** (`GOGI_AUTH gate passed uid=3f6dbd7c…`). Evidence frames in `/tmp/feel/*.png` (A2, B0–B4, D2–D7 referenced below).
 
 ---
 
-## ❌ P0 — The elder's hut is physically unenterable → quest/goal cannot complete
+## ❗ P1 — Sign-in form GHOSTS through the title screen (reads as broken z-fighting)
 
-**Symptom.** The hinged door opens (USE → prompt flips to "Close Door"), but the player cannot cross the threshold. In **4 independent sessions** the player froze at exactly **z = 39.0–39.1** (the door plane) while pushing north, including dead-centred on the doorway gap (x 36.4–36.8; gap is x 35.8–37.2), door verified open, jumping included. `collect: heron_charm` (chest at ~(33.5, 33.5) inside) is therefore impossible, so the quest — and the world goal — can never complete. The completion panel/reward path is dead.
+**Symptom (verified, screenshot A2):** ~12 s into boot, while the HERONWADE/WANDER title is still up, the sign-in form is faintly but clearly visible bleeding through it — the email/password field boxes, the drawn eye icon (brightest artifact, white @ 0.5 alpha), and the "Sign in" button text sit ghosted between the tagline and the WANDER button. On the very first screen every new player sees, this reads as a rendering bug.
 
-**Evidence (collider probe, door OPEN).** `gogiSolids` around the hut (world.json c2_2 structure, world footprint x 32–41, z 32–39):
-- Door leaf collider **leaves the gap when opened** (probe of the gap window returns no leaf while prompt = "Close Door") — the door mechanic itself works.
-- Doorway is collider-free below ~1.8 m (only the jamb posts at x 34.5/37.2 and the flat threshold ramp).
-- One full-footprint solid body spans **x 32–41, y 1.83–4.98, z 32–39** — an upper-shell/gable-cap body whose collision dips to **head height (~1.83 m) over the door plane**. Player capsule top ≈ 1.9 m → blocked at exactly the observed plane. (Alternative/additional suspect: the threshold-ramp/slab lip. Either way it is engine-side geometry, not the data.)
+**Root cause (code-traced):** `main.gd:461 _gate_auth()` runs mid-boot and `auth_gate.gd gate()` sets `visible = true` the moment the world build reaches it — independent of the title. The gate is on `layer 90`, the shell's title on `layer 150`, and the title backdrop is authored **semi-transparent**: `world.json → director.title.bg = [0.04, 0.06, 0.05, 0.94]` — 6 % of the form leaks through.
 
-**Where to fix.** `build_structure.gd` (enterable-shell path): the cap/upper-shell collider must not extend down into the doorway (keep roof collision ≥ wall top, or cut the door face out of it), then verify with a literal walk-through (`gogiGetPlayer` z crossing 39 → 37) rather than a door-opens check — the door opening is what masked this.
+**Fix direction (pick one):**
+- *Data-side (one value, game-owned):* set the title bg alpha to `1.0` in `world.json` (`director.title.bg[3]`). Kills the bleed outright.
+- *Engine-side (cleaner ordering):* in `auth_gate.gd`/`main.gd`, don't set the gate visible while the shell's title is showing (main already exposes the director; `_title_root.visible` is the check) — reveal it on title dismissal.
 
-Note: `interior.door_face:"n"` lands the door on the boardwalk side (+Z) as intended — the face choice is correct; the blocker is the collider above the gap.
+## ❗ P1 — Death shows a full-screen DEFEATED modal ON TOP of the toast+respawn the new rule authored
 
-## ❗ P1 — All five `regions` are offset (−8, −8) from their landmarks (corner vs centre cell math)
+**Symptom (code-traced; could not trigger live — see sandbox limits):** the new `mp_respawn` rule (`world.json` rules[9]: `player_died → toast "The marsh takes you... and gives you back." + respawn`) makes `rules.references_death()` return true (`rules.gd:134` — *any* `player_died` listener counts). The death path `main.gd:1279-1284` (duplicated at `~1414` in `set_player_health`) then does BOTH:
+1. `fire("player_died")` → rule runs synchronously: toast + `respawn_player(true)` — player teleported to spawn, healed, `clear_defeat()` a no-op because the panel isn't up yet;
+2. `_show_defeat()` → full-screen "DEFEATED / TRY AGAIN" modal (`game_shell.gd:640`, input-blocking, 0.85 dim on layer 150) appears OVER the already-alive, respawned player, dimming/hiding the toast (toast lives on hud_layer 0). "TRY AGAIN" calls `main.restart_run()` — a **full run reset** for a player who was already given back.
 
-Engine cell centre is `gx*16+8` (spawn confirms: start_cell [0,2] → player at (8,40)); the region centres in world.json were authored with corner math. Measured in play:
-- **"The Reed Road"** (0,32) r10 is 11.3 m from the spawn/gate (8,40): the entry toast fired at boot in ~half my sessions and **never fired at all** in the others when walking the intended eastward path (PLACES SEEN stuck at lower counts).
-- **"The Elder's Hut"** (28.5,27.5) r6 barely grazes the real hut (32–41, 32–39): `seen_hut` (+1 explored) fired for my bot **standing in open mud ~8 m SW of the hut** — twice — and PLACES SEEN reached 5/5 in a session where the hut was never entered. Conversely, standing inside the hut would NOT trigger it.
-- **"Old Murk's Pool"** (94,32) r8 vs the fish at (102,40): the subtitle+shake fires ~8–11 m before the fish is even visible in fog, only because the swim path grazes the circle's edge; standing at the fish is outside the region.
+This is exactly the "modal popup on routine death" defect class, and it directly contradicts the authored copy ("…and gives you back"). It IS reachable in real play: PvP hits route through `take_damage` (`main.gd:3183-3195 _on_hit_taken`) and multiplayer is now enabled with 6 players.
 
-**Fix.** Add (+8, +8) to every region centre in world.json; then re-centre "The Elder's Hut" on the actual hut (≈ (36.5, 35.5), r ~6, still covering the interior) and "Old Murk's Pool" on the fish (≈ (102, 40)).
+**Fix direction:** make death non-modal, don't add a death screen — after `fire("player_died")`, only call `_show_defeat()` if the player is still dead (`rpg.hp <= 0.0`), i.e. no rule claimed the death by respawning/healing. Alternative: `references_death()` should only count rules that run `lose`, not any `player_died` listener. (Removing the rule is NOT a fix — it would lose the toast and revert to silent heal-in-place.)
 
-## ❗ P1 — The only door's approach is congested: elder in the USE cone, wanderers body-crowding the frame, scatter on the path
+**The toast itself is right:** transient label (fades via `_toast_t`, `game_shell.gd`), non-modal, eye-level at 16 % height, 80 % width; copy is in-voice and short. ✅ once the modal stops stomping it.
 
-- **Elder Sedge is authored 3.6 m in front of the door** ((36.5, 42.6) vs door (36.5, 39)): tapping USE on the door approach targets "Talk to Elder Sedge" instead of the door (nearest-wins, both within 2.9 m). Reproduced: opened chat when trying to open the door.
-- The village-square **wander crowd loiters in/at the doorway** — repeated frames show 2–3 herons stacked on the player at the threshold, filling most of the frame with feathers at the game's key interaction point (the one place the camera reads "walled" in the whole game).
-- A **scatter bush sits on the boardwalk against the doorway** and a **dead tree grows through the plank steps** in front of the door — visual blockers on the critical path (scatter wasn't audited against the door zone).
+## ❗ P1 — Auth form touch targets render at ~24 pt, half the platform minimum the code itself targets
 
-**Fix (data).** Move the elder ~3 m aside (porch corner), keep the populate wander radius/centre clear of the door face, and pull the bush/tree scatter off the walkway + door approach.
+**Symptom (measured):** the project stretches a 720-wide base viewport onto the 390 pt screen (`canvas_items` + `expand`, scale = 390/720 ≈ 0.54; confirmed live — `GOGI_HUD_GRID vp 720x1558 win 390x844`). So the gate's "44 pt" fields (`auth_gate.gd:123` — comment says *"44pt: the smallest reliably tappable target"*) actually render **≈ 24 pt tall** (measured ~24 px field height in B0 at 390 CSS px width; same ratio holds on a real DPR-3 phone). Eye toggle ≈ 26×24 pt; "No account? Create one" / "Forgot password" flat buttons ≈ 17 pt tall, packed at ~6.5 pt gaps — adjacent-target mis-taps (Sign in vs Create one; email vs password) are likely on a thumb. This is a HARD gate every new player must pass one-handed; Apple/Android minimums are 44 pt/48 dp.
 
-## ❗ P1 — Quest objective label is flaky: absent for entire sessions
+**Root cause:** `auth_gate.gd` sizes controls in Godot units assuming 1 unit = 1 pt; under this project's 720-base stretch every unit is worth 0.54 pt. **Fix direction:** scale the gate's metrics by the content-scale (or ~2× the constants: fields ≥ 82 units, eye ≥ 88×82, real buttons instead of flat text links), or put the gate on its own unscaled sizing.
 
-In 3 of 6 full boots the top-left "QUEST: Village of Stilts …" label **never appeared** — the whole village walk played with no visible objective (the only guidance is one 5-second toast at start; spawn also faces away from the village, see polish). In the other 3 boots it showed from spawn and behaved well. Per the workspace engine source the label is chain-gated (`_quest_lbl.visible` only set when the mode declares a `chain`) and the wander mode declares none, so its appearance at all looks like a boot-order race in the shipped build.
-**Fix (data-first).** Give the wander mode a `chain` for `village_of_stilts` so the label is deterministic; also consider showing only the active step — the current 4-step block wraps into ~8 cramped lines on 390 px and the region toast prints across it when both are active (seen at Old Murk and at the hut).
-
-## ❗ P1 — Skerrin (and pier wanderers) stand in the channel water
-
-Skerrin is authored at (92.8, 40.5); the canyon channel starts ≈ x 91 and the pier planks end ~x 86–88 — the "fisher on the pier head" stands shin-deep offshore (screenshot: heron standing in open water east of the pier), and pier-populate wanderers stroll into the channel (r6 around (88,40) reaches x 94). USE at the pier head produced no visible talk state. **Fix:** move Skerrin onto the pier platform (~(87, 40)) and tighten the pier populate radius.
+---
 
 ## ⚠️ Polish
 
-- **Spawn faces empty fog.** Default cam_yaw looks north into bare reeds; the boardwalk, gate and village (the entire game) are east, behind the camera, while the toast says "follow the boardwalks". Face the start camera east — the east-facing view (captured) is a genuinely inviting first frame.
-- **Title screen:** "HERONWADE" wraps to "HERON / WADE" at both aspects (reads as two words); HUD bleeds through/over the title backdrop — "PLACES SEEN 0", the red HP bar sliver + stats remnant (the hide rule only runs at mode start) and ghost JUMP/USE are visible on the title, most noticeably in landscape.
-- **Drawn weapon in a peaceful game:** the wanderer carries the `start_weapon` mallet/rusty-sword in hand through a combat-free village (combat HUD correctly hidden). Start sheathed or ship no weapon.
-- **Snag pockets off the walkway:** concave prop pockets (e.g. crate+barrel+hut at ~(55, 46)) can momentarily wedge movement; a human recovers by backing out, but fat-finger joystick play brushes these often. Consider nudging dressing 1 m off the walkway edge.
-- Mood drift: world.json ships `sky.time:"day"` (white-grey fog) vs the planned sunset amber; readability is fine, ambience is flatter than the brief.
+- **Region toast overlaps the quest log while showing** (D2): "The Reed Road" toast (y = 16 %) renders across quest line 4 top-left for its ~5 s life. Transient, so not a P1 — but nudging the toast below the quest block (or right-aligning it) would stop the momentary text-on-text. `game_shell.gd:843-845`.
+- **"HERONWADE" wraps mid-word to "HERON / WADE"** on the title at 390 pt (84-unit font in a ~390 pt column, `AUTOWRAP_WORD_SMART` breaking inside the single word). Stacked it almost reads as a style choice, but it's an artifact; a smaller `name` font or authored line break would make it deliberate. Pre-existing surface, surfaced here because the boot flow is under review.
 
-## ✅ Passes (verified, not assumed)
+## ✅ Passes (all verified live via touch at 390×844)
 
-- **Touch controls (the P0 class): all work one-handed at both aspects.** Virtual joystick moved the player (15.3 m / 9.9 m holds), right-side drag turned the camera (−1.1 rad per 100 px drag — brisk but in range), JUMP fired via touch (vy 3.0, anim "jump"), USE via touch talked to the elder, opened/closed the door, and addressed Old Murk. Button grid sits in right-thumb reach, entirely clear of the joystick half.
-- **Camera:** no clip-through of huts/NPCs/the giant catfish in any reviewed frame; melee-range NPCs and the colossal Old Murk never fill the frame like a popup (the fish close-up is the best shot in the game — player visibly small against its flank, HUD and horizon intact; pushing INTO the fish still didn't wall the camera). Pitch clamps (−1.05 … 0.25 rad) never stare at floor/sky irrecoverably; both extremes are user-driven and recoverable.
-- **HUD on phone:** portrait + landscape layouts clean — minimap square top-right, PLACES SEEN dodges it (engine `HUD_FIT` relocation observed), JUMP/USE never clipped (landscape short-viewport fix works), hidden-button rule respected (attack/weapon/potion/stable/cycle/stats/health absent everywhere), **no debug text in any frame** (GOGI telemetry is console-only).
-- **Transient vs persistent:** region names ("The Reed Road", "The Village Square", "The Elder's Hut", "Old Murk's Pool") are 2.2 s engine toasts — confirmed faded in +8–75 s follow-up frames; start toast and charm toast fade; Old Murk's stir is a non-modal subtitle + 0.25 shake that cleans up fully (verified frame with zero stale text). Persistent set is exactly: quest label (when it shows), PLACES SEEN, minimap, JUMP/USE.
-- **Pace/scale:** 6 m/s walk ⇒ gate→pier ≈ 13 s real time — right for a 128 m village; swim to Old Murk works (4.2 m/s), prompt reachable from the water.
-- VRAM telemetry ~52 MB — comfortably inside the mobile budget (QA's gate, but no feel risk).
+- **Boot ordering coherent:** overlay tap → title → single WANDER tap → clean sign-in form (B0: no stray error, no double-title; "commit to play, then identity" reads fine for a first-timer, and the gate remembers the session afterwards per `Auth.restore_session`).
+- **Form layout:** centered, no overflow, nothing clipped; fields at y≈378–426 sit comfortably in the top half — above where a virtual keyboard lands. "No account? Create one" and "Forgot password" both visible without scrolling.
+- **Error state legible** (B1): "Enter a valid email address." in salmon, centered under the fields; clear-button (×) appears in the email field. Signup flip works and clears stale status (B3: "Create account" / "Have an account? Sign in").
+- **Password reveal toggle works via touch** (B2: plaintext shown, drawn eye changes state — no missing-emoji box).
+- **Real sign-in end-to-end via the touch-driven form:** gate passed, `GOGI_MP enabled max_players=6`, rules layer alive post-gate (`start_amb`, `seen_gate` fired).
+- **Game unchanged post-sign-in:** touch joystick drag moves the player (frame + minimap shift, D2→D3); right-side touch drag yaws the camera (D4); JUMP and USE fire from their bottom-right thumb column via tap (D5/D6, buttons ≈ 119×65 pt — generous); pitch clamp holds on a full-screen downward drag — no floor-stare (D7); quest log readable against the fog (shadowed yellow); **no debug text on screen** (VRAM/HUD telemetry is console-only); no pinned region label — "The Reed Road" fades as a toast.
 
 ## Could not verify (sandbox limits)
 
-- **NPC LLM chat replies/close flow:** chat POSTs are cross-origin-blocked in the sandbox; "Elder Sedge is speaking…" / "Old Murk is speaking…" states verified, replies not. Verify one reply renders non-modally on the live host.
-- **Quest completion panel** ("THE FOG FEELS LIKE HOME"): unreachable behind the P0.
-- True multi-touch feel (simultaneous move+look chords), real-device notch/safe-area (engine inset code present; insets were 0 headless), audio output, real-GPU frame pacing.
-
-*Screenshot evidence for every claim above is in `/tmp/feel/` (portrait `p4-*`,`p5-*`,`p6-*`,`p8-*`,`p9-*`,`p12-*`; landscape `land2-*`; collider dumps `solids-*.json`).*
+- **Live death → toast/modal sequence:** no single-player damage source exists (no enemies; only a 1-damage weapon) and the PvP path needs a second peer — the container cannot open `wss://` (known env artifact; `GOGI_MP_NET peers=0` all run). The P1 above is code-traced with exact lines, not observed on screen.
+- **Real multiplayer feel** (peer avatars, hit-direction arc) — same wss block.
+- **Real-device keyboard occlusion, notch/safe-area, true multi-touch** (joystick + look simultaneously) — headless container has no virtual keyboard, notch, or concurrent touch streams.
+- **Returning-player silent path** (`restore_session` skipping the form) — fresh browser context each probe run.
+- Landscape aspect not judged — delegation specified 390×844 portrait.

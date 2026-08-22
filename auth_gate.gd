@@ -29,6 +29,13 @@ var _hold_le: LineEdit = null
 var _hold_at := 0.0
 var _hold_from := Vector2.ZERO
 
+# Canvas units per SCREEN POINT. This project stretches a 720-wide base viewport onto phone
+# widths (~390pt), so 1 canvas unit renders at ~0.54pt there — a "44" field is really ~24pt,
+# half the platform tap minimum. Every touch metric below is multiplied by this so the RENDERED
+# size is what the constant names. Clamped at 1.0: desktop windows are wider than the base and
+# would otherwise shrink the form.
+var _k := 1.0
+
 
 ## The reveal toggle's icon, DRAWN rather than typed.
 ##
@@ -91,14 +98,15 @@ func _build() -> void:
 		if ev is InputEventMouseButton and (ev as InputEventMouseButton).pressed:
 			_dismiss_keyboard())
 	add_child(bg)
+	_k = maxf(1.0, bg.get_viewport_rect().size.x / maxf(1.0, float(get_window().size.x)))
 
 	var box := VBoxContainer.new()
 	# The form column must not swallow taps aimed at the backdrop — only the fields and buttons
 	# inside it should consume input, so a tap in the gaps between them still closes the keyboard.
 	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	box.set_anchors_preset(Control.PRESET_CENTER)
-	box.custom_minimum_size = Vector2(320, 0)
-	box.add_theme_constant_override("separation", 12)
+	box.custom_minimum_size = Vector2(320.0 * _k, 0)
+	box.add_theme_constant_override("separation", roundi(12.0 * _k))
 	box.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	box.grow_vertical = Control.GROW_DIRECTION_BOTH
 	bg.add_child(box)
@@ -106,7 +114,7 @@ func _build() -> void:
 	var title := Label.new()
 	title.text = "Sign in to play"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 24)
+	title.add_theme_font_size_override("font_size", roundi(24.0 * _k))
 	box.add_child(title)
 
 	var why := Label.new()
@@ -114,13 +122,15 @@ func _build() -> void:
 	why.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	why.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	why.modulate = Color(1, 1, 1, 0.6)
+	why.add_theme_font_size_override("font_size", roundi(15.0 * _k))
 	box.add_child(why)
 
 	_email = LineEdit.new()
 	_email.placeholder_text = "email"
 	# Mobile keyboards: the wrong type here means a player fights autocapitalisation on their address.
 	_email.virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_EMAIL_ADDRESS
-	_email.custom_minimum_size = Vector2(0, 44)   # 44pt: the smallest reliably tappable target
+	_email.custom_minimum_size = Vector2(0, 44.0 * _k)   # 44pt: the smallest reliably tappable target
+	_email.add_theme_font_size_override("font_size", roundi(16.0 * _k))
 	# Tapping a field you have already filled almost always means "this is wrong, replace it" — on a
 	# phone, positioning a caret to edit in place is far more work than retyping.
 	_email.select_all_on_focus = true
@@ -131,13 +141,14 @@ func _build() -> void:
 	_password.placeholder_text = "password"
 	_password.secret = true
 	_password.virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_PASSWORD
-	_password.custom_minimum_size = Vector2(0, 44)
+	_password.custom_minimum_size = Vector2(0, 44.0 * _k)
+	_password.add_theme_font_size_override("font_size", roundi(16.0 * _k))
 	_password.select_all_on_focus = true
 	# A masked field on a phone keyboard is the easiest thing in the world to fumble, and the only
 	# feedback is a failed sign-in that blames your credentials.
 	var reveal := Button.new()
 	reveal.toggle_mode = true
-	reveal.custom_minimum_size = Vector2(48, 44)
+	reveal.custom_minimum_size = Vector2(48.0 * _k, 44.0 * _k)
 	var eye := EyeIcon.new()
 	eye.set_anchors_preset(Control.PRESET_FULL_RECT)
 	eye.mouse_filter = Control.MOUSE_FILTER_IGNORE   # the Button owns the tap; the icon is decoration
@@ -152,23 +163,29 @@ func _build() -> void:
 	_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_status.modulate = Color(1, 0.55, 0.5)
+	_status.add_theme_font_size_override("font_size", roundi(15.0 * _k))
 	box.add_child(_status)
 
 	_primary = Button.new()
 	_primary.text = "Sign in"
-	_primary.custom_minimum_size = Vector2(0, 48)
+	_primary.custom_minimum_size = Vector2(0, 48.0 * _k)
+	_primary.add_theme_font_size_override("font_size", roundi(17.0 * _k))
 	_primary.pressed.connect(_submit)
 	box.add_child(_primary)
 
 	_toggle = Button.new()
 	_toggle.text = "No account? Create one"
 	_toggle.flat = true
+	_toggle.custom_minimum_size = Vector2(0, 44.0 * _k)
+	_toggle.add_theme_font_size_override("font_size", roundi(15.0 * _k))
 	_toggle.pressed.connect(_flip_mode)
 	box.add_child(_toggle)
 
 	var forgot := Button.new()
 	forgot.text = "Forgot password"
 	forgot.flat = true
+	forgot.custom_minimum_size = Vector2(0, 44.0 * _k)
+	forgot.add_theme_font_size_override("font_size", roundi(15.0 * _k))
 	forgot.modulate = Color(1, 1, 1, 0.5)
 	forgot.pressed.connect(_recover)
 	box.add_child(forgot)
@@ -182,7 +199,7 @@ func _build() -> void:
 ## hold the field — and `_on_field_input` below is what makes that gesture exist here at all.
 func _field_row(le: LineEdit, extra: Control = null) -> HBoxContainer:
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 6)
+	row.add_theme_constant_override("separation", roundi(6.0 * _k))
 	le.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	le.gui_input.connect(_on_field_input.bind(le))
 	row.add_child(le)
