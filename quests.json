@@ -1,0 +1,34 @@
+{
+  "quests": [
+    {
+      "id": "village_of_stilts",
+      "name": "Village of Stilts",
+      "auto_start": true,
+      "giver": "elder_sedge",
+      "steps": [
+        {
+          "id": "meet",
+          "objective": { "type": "talk_to", "target": "elder_sedge" },
+          "desc": "Find Elder Sedge near the great hut"
+        },
+        {
+          "id": "charm",
+          "objective": { "type": "collect", "target": "heron_charm" },
+          "desc": "Step inside the elder's hut and take the heron charm"
+        },
+        {
+          "id": "pier",
+          "objective": { "type": "reach_area", "target": "c5_2" },
+          "desc": "Walk out onto the great pier"
+        },
+        {
+          "id": "murk",
+          "objective": { "type": "talk_to", "target": "old_catfish" },
+          "desc": "Whisper a greeting to Old Murk below the pier"
+        }
+      ],
+      "rewards": { "xp": 80, "gold": 0 },
+      "on_complete_flags": ["fog_settled"]
+    }
+  ]
+}
