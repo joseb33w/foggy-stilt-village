@@ -1,0 +1,12 @@
+/out/
+/.godot/
+/godot
+/verify/
+/playbooks/
+/web/
+/gogi-fetch
+/.gogi-cache/
+*.tmp
+*.zip
+PLAN.md.bak
+.gogi-cache/

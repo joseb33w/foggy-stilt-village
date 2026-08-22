@@ -1,0 +1,28 @@
+{
+  "cell": [2, 2],
+  "structure": {
+    "pos": [-3.5, -4.5],
+    "footprint": [9.0, 7.0],
+    "floors": 1,
+    "floor_height": 3.4,
+    "profile": "vertical",
+    "cap": "gable",
+    "material": "timber",
+    "roof_material": "thatch",
+    "facade": "windows",
+    "window_glow": [1.0, 0.72, 0.42],
+    "rot": 0,
+    "interior": { "door": "hinged", "door_face": "n", "rooms": 1, "lit": true, "glow": 1.6 }
+  },
+  "chest_pos": [-6.5, -6.5],
+  "furniture_props": [
+    { "url": "https://preview.myapping.com/godot-assets/props/kk_furniture/bed_single_A.glb", "pos": [-6.75, -2.9], "rot": 0 },
+    { "url": "https://preview.myapping.com/godot-assets/props/mega_fantasy/bucket_wooden_1.glb", "pos": [-7.2, -5.3], "rot": 25, "collider": false },
+    { "url": "https://preview.myapping.com/godot-assets/props/kk_furniture/table_medium.glb", "pos": [-2.0, -5.7], "rot": 0 },
+    { "url": "https://preview.myapping.com/godot-assets/props/kk_furniture/chair_stool_wood.glb", "pos": [-2.0, -4.2], "rot": 180, "collider": false },
+    { "url": "https://preview.myapping.com/godot-assets/props/kk_furniture/shelf_B_small.glb", "pos": [0.55, -3.2], "rot": 270 },
+    { "url": "https://preview.myapping.com/godot-assets/props/kk_furniture/cabinet_small.glb", "pos": [-0.6, -1.9], "rot": 180 },
+    { "url": "https://preview.myapping.com/godot-assets/props/kk_dungeon/barrel_small.glb", "pos": [0.0, -7.0], "rot": 40 }
+  ],
+  "notes": "Elder's hut kept at 9x7 timber/thatch with warm window glow; ceiling raised to floor_height 3.4 (1 floor, non-squished; engine door_h stays a full 2.2). door_face is 'n' — per build_structure.gd '\"s\" = the -Z face', so the +Z wall (cell z=-1) that physically abuts the boardwalk at z~0 (Elder Sedge stands at [-3.5,2.6]) is the engine's 'n' face; the delegation's 'walkway to the SOUTH-EAST' uses map-down=+z convention, and keeping the literal 's' would aim the door at the cell edge/swamp at z=-8. rooms:1 builds a full-depth partition at cell x=-4.9 with a centered 1.2m arch at z=[-5.1,-3.9], splitting a ~5.6m main hall (door side) from a ~2.75m sleeping alcove; the door (opening x=[-4.2,-2.8]) lands in the main hall, so door -> 1.9m corridor west of the table -> arch -> chest at [-6.5,-6.5] in the alcove is fully walkable, narrowest pinch 1.05m (bed east edge to partition), everything else >=1.2m. Chest stays at [-6.5,-6.5] (inside the alcove, 3.6m+ from the door swing, >=1.1m wall/prop clearance). All 7 furniture pieces verified against actual GLB AABBs (bed 1.6x3.0, table 2x2, cabinet/barrel 1x1, shelf 1x0.5, stool 0.75, bucket 0.43): all inside the lined cavity x=[-7.65,0.65] z=[-7.65,-1.35], all >=2.0m from the door center and outside the 1.4m leaf swing arc (hinge at east jamb x=-2.8), no overlap with chest, partition or arch. Stool and bucket opt out of colliders so the floor stays forgiving; big pieces stay solid-by-default."
+}
