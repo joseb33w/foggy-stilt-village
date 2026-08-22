@@ -177,7 +177,11 @@ static func _add_cap(root: Node3D, cap: String, top_foot: Vector2, height: float
 		_:   # "flat" / unknown -> no cap
 			return
 	if c != null:
-		c.position.y = height
+		# `+=`, not `=`: the GShapes factories return primitives PRE-LIFTED so their BASE sits at
+		# local y=0 (wedge/cylinder carry position.y = h/2 over a CENTRED mesh). Assigning wiped
+		# that lift, sinking a gable/spire cap halfway into the storey below — its trimesh collider
+		# hung at head height over an enterable shell's doorway (the unenterable-hut bug).
+		c.position.y += height
 		GShapes.set_material(c, roof_mat)
 		# SHELLED buildings skip the whole-AABB box collider (it would seal the doorway), so their
 		# decorative cap would otherwise have NO collider and things could clip up into the sloped

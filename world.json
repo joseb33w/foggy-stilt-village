@@ -18,7 +18,7 @@
   }
  },
  "sky": {
-  "time": "sunset",
+  "time": "day",
   "weather": "fog"
  },
  "terrain": {
@@ -100,40 +100,40 @@
   {
    "name": "The Reed Road",
    "center": [
-    0,
-    32
+    8,
+    40
    ],
    "radius": 10
   },
   {
    "name": "The Village Square",
    "center": [
-    32,
-    32
+    40,
+    40
    ],
    "radius": 12
   },
   {
    "name": "The Great Pier",
    "center": [
-    84,
-    32
+    92,
+    40
    ],
    "radius": 10
   },
   {
    "name": "Old Murk's Pool",
    "center": [
-    94,
-    32
+    102,
+    40
    ],
    "radius": 8
   },
   {
    "name": "The Elder's Hut",
    "center": [
-    28.5,
-    27.5
+    36.5,
+    35.5
    ],
    "radius": 6
   }
@@ -144,7 +144,7 @@
     -1,
     -1
    ],
-   "ground": "mud",
+   "ground": "grass",
    "scatter": [
     {
      "kind": "plant",
@@ -370,10 +370,10 @@
     {
      "part": {
       "shape": "cylinder",
-      "bottom_r": 0.15,
-      "top_r": 0.13,
       "height": 2.5,
-      "material": "timber"
+      "material": "timber",
+      "radius": 0.15,
+      "top_radius": 0.13
      },
      "from": [
       0.0,
@@ -388,10 +388,10 @@
     {
      "part": {
       "shape": "cylinder",
-      "bottom_r": 0.15,
-      "top_r": 0.13,
       "height": 2.5,
-      "material": "timber"
+      "material": "timber",
+      "radius": 0.15,
+      "top_radius": 0.13
      },
      "from": [
       0.0,
@@ -566,7 +566,7 @@
     -1,
     6
    ],
-   "ground": "mud",
+   "ground": "grass",
    "scatter": [
     {
      "kind": "plant",
@@ -618,7 +618,7 @@
     0,
     -1
    ],
-   "ground": "mud",
+   "ground": "grass",
    "scatter": [
     {
      "kind": "plant",
@@ -755,6 +755,26 @@
       0.0
      ],
      "to": [
+      -2.5,
+      0.0
+     ],
+     "spacing": 1.5
+    },
+    {
+     "part": {
+      "shape": "box",
+      "size": [
+       1.5,
+       0.15,
+       2.4
+      ],
+      "material": "timber"
+     },
+     "from": [
+      2.5,
+      0.0
+     ],
+     "to": [
       8.0,
       0.0
      ],
@@ -763,17 +783,17 @@
     {
      "part": {
       "shape": "cylinder",
-      "bottom_r": 0.15,
-      "top_r": 0.13,
       "height": 2.5,
-      "material": "timber"
+      "material": "timber",
+      "radius": 0.15,
+      "top_radius": 0.13
      },
      "from": [
       -8.0,
       -1.4
      ],
      "to": [
-      8.0,
+      -2.5,
       -1.4
      ],
      "spacing": 2.7
@@ -781,17 +801,17 @@
     {
      "part": {
       "shape": "cylinder",
-      "bottom_r": 0.15,
-      "top_r": 0.13,
       "height": 2.5,
-      "material": "timber"
+      "material": "timber",
+      "radius": 0.15,
+      "top_radius": 0.13
      },
      "from": [
       -8.0,
       1.4
      ],
      "to": [
-      8.0,
+      -2.5,
       1.4
      ],
      "spacing": 2.7
@@ -799,10 +819,10 @@
     {
      "part": {
       "shape": "cylinder",
-      "bottom_r": 0.22,
-      "top_r": 0.18,
       "height": 3.8,
-      "material": "timber"
+      "material": "timber",
+      "radius": 0.22,
+      "top_radius": 0.18
      },
      "from": [
       -6.0,
@@ -842,13 +862,6 @@
      "pos": [
       4.9,
       3.4
-     ]
-    },
-    {
-     "kind": "log",
-     "pos": [
-      -2.0,
-      -4.5
      ]
     }
    ],
@@ -946,7 +959,7 @@
     0,
     6
    ],
-   "ground": "mud",
+   "ground": "grass",
    "scatter": [
     {
      "kind": "plant",
@@ -998,7 +1011,7 @@
     1,
     -1
    ],
-   "ground": "mud",
+   "ground": "grass",
    "scatter": [
     {
      "kind": "plant",
@@ -1122,10 +1135,10 @@
     {
      "part": {
       "shape": "cylinder",
-      "bottom_r": 0.15,
-      "top_r": 0.13,
       "height": 2.2,
-      "material": "timber"
+      "material": "timber",
+      "radius": 0.15,
+      "top_radius": 0.13
      },
      "from": [
       -5.0,
@@ -1231,10 +1244,10 @@
     {
      "part": {
       "shape": "cylinder",
-      "bottom_r": 0.15,
-      "top_r": 0.13,
       "height": 2.5,
-      "material": "timber"
+      "material": "timber",
+      "radius": 0.15,
+      "top_radius": 0.13
      },
      "from": [
       -8.0,
@@ -1249,10 +1262,10 @@
     {
      "part": {
       "shape": "cylinder",
-      "bottom_r": 0.15,
-      "top_r": 0.13,
       "height": 2.5,
-      "material": "timber"
+      "material": "timber",
+      "radius": 0.15,
+      "top_radius": 0.13
      },
      "from": [
       -8.0,
@@ -1267,10 +1280,10 @@
     {
      "part": {
       "shape": "cylinder",
-      "bottom_r": 0.15,
-      "top_r": 0.13,
       "height": 2.2,
-      "material": "timber"
+      "material": "timber",
+      "radius": 0.15,
+      "top_radius": 0.13
      },
      "from": [
       1.1,
@@ -1404,10 +1417,10 @@
     {
      "part": {
       "shape": "cylinder",
-      "bottom_r": 0.15,
-      "top_r": 0.13,
       "height": 2.2,
-      "material": "timber"
+      "material": "timber",
+      "radius": 0.15,
+      "top_radius": 0.13
      },
      "from": [
       -1.5,
@@ -1520,7 +1533,7 @@
     1,
     6
    ],
-   "ground": "mud",
+   "ground": "grass",
    "scatter": [
     {
      "kind": "plant",
@@ -1572,7 +1585,7 @@
     2,
     -1
    ],
-   "ground": "mud",
+   "ground": "grass",
    "scatter": [
     {
      "kind": "plant",
@@ -1667,10 +1680,10 @@
     {
      "part": {
       "shape": "cylinder",
-      "bottom_r": 0.15,
-      "top_r": 0.13,
       "height": 2.5,
-      "material": "timber"
+      "material": "timber",
+      "radius": 0.15,
+      "top_radius": 0.13
      },
      "from": [
       1.6,
@@ -1685,10 +1698,10 @@
     {
      "part": {
       "shape": "cylinder",
-      "bottom_r": 0.15,
-      "top_r": 0.13,
       "height": 2.5,
-      "material": "timber"
+      "material": "timber",
+      "radius": 0.15,
+      "top_radius": 0.13
      },
      "from": [
       4.4,
@@ -1750,10 +1763,10 @@
     {
      "part": {
       "shape": "cylinder",
-      "bottom_r": 0.15,
-      "top_r": 0.13,
       "height": 2.5,
-      "material": "timber"
+      "material": "timber",
+      "radius": 0.15,
+      "top_radius": 0.13
      },
      "from": [
       1.6,
@@ -1768,10 +1781,10 @@
     {
      "part": {
       "shape": "cylinder",
-      "bottom_r": 0.15,
-      "top_r": 0.13,
       "height": 2.5,
-      "material": "timber"
+      "material": "timber",
+      "radius": 0.15,
+      "top_radius": 0.13
      },
      "from": [
       4.4,
@@ -1786,10 +1799,10 @@
     {
      "part": {
       "shape": "cylinder",
-      "bottom_r": 0.15,
-      "top_r": 0.13,
       "height": 2.2,
-      "material": "timber"
+      "material": "timber",
+      "radius": 0.15,
+      "top_radius": 0.13
      },
      "from": [
       -5.75,
@@ -1919,10 +1932,10 @@
     {
      "part": {
       "shape": "cylinder",
-      "bottom_r": 0.15,
-      "top_r": 0.13,
       "height": 2.5,
-      "material": "timber"
+      "material": "timber",
+      "radius": 0.15,
+      "top_radius": 0.13
      },
      "from": [
       -8.0,
@@ -1937,10 +1950,10 @@
     {
      "part": {
       "shape": "cylinder",
-      "bottom_r": 0.15,
-      "top_r": 0.13,
       "height": 2.5,
-      "material": "timber"
+      "material": "timber",
+      "radius": 0.15,
+      "top_radius": 0.13
      },
      "from": [
       -8.0,
@@ -1975,10 +1988,10 @@
     {
      "part": {
       "shape": "cylinder",
-      "bottom_r": 0.15,
-      "top_r": 0.13,
       "height": 2.5,
-      "material": "timber"
+      "material": "timber",
+      "radius": 0.15,
+      "top_radius": 0.13
      },
      "from": [
       1.6,
@@ -1993,10 +2006,10 @@
     {
      "part": {
       "shape": "cylinder",
-      "bottom_r": 0.15,
-      "top_r": 0.13,
       "height": 2.5,
-      "material": "timber"
+      "material": "timber",
+      "radius": 0.15,
+      "top_radius": 0.13
      },
      "from": [
       4.4,
@@ -2011,10 +2024,10 @@
     {
      "part": {
       "shape": "cylinder",
-      "bottom_r": 0.15,
-      "top_r": 0.13,
       "height": 2.2,
-      "material": "timber"
+      "material": "timber",
+      "radius": 0.15,
+      "top_radius": 0.13
      },
      "from": [
       -8.0,
@@ -2038,6 +2051,7 @@
       7.0
      ],
      "floors": 1,
+     "floor_height": 3.4,
      "profile": "vertical",
      "cap": "gable",
      "material": "timber",
@@ -2051,9 +2065,10 @@
      "rot": 0,
      "interior": {
       "door": "hinged",
-      "door_face": "s",
+      "door_face": "n",
       "rooms": 1,
-      "lit": true
+      "lit": true,
+      "glow": 1.6
      }
     }
    ],
@@ -2087,33 +2102,70 @@
      ]
     },
     {
-     "kind": "log",
+     "url": "https://preview.myapping.com/godot-assets/props/kk_furniture/bed_single_A.glb",
      "pos": [
-      6.0,
-      6.0
-     ]
+      -6.75,
+      -2.9
+     ],
+     "rot": 0
     },
     {
-     "kind": "stump",
+     "url": "https://preview.myapping.com/godot-assets/props/mega_fantasy/bucket_wooden_1.glb",
      "pos": [
-      -6.0,
-      6.0
-     ]
+      -7.2,
+      -5.3
+     ],
+     "rot": 25,
+     "collider": false
     },
     {
-     "kind": "rock",
+     "url": "https://preview.myapping.com/godot-assets/props/kk_furniture/table_medium.glb",
      "pos": [
-      6.0,
-      -6.0
-     ]
+      -2.0,
+      -5.7
+     ],
+     "rot": 0
+    },
+    {
+     "url": "https://preview.myapping.com/godot-assets/props/kk_furniture/chair_stool_wood.glb",
+     "pos": [
+      -2.0,
+      -4.2
+     ],
+     "rot": 180,
+     "collider": false
+    },
+    {
+     "url": "https://preview.myapping.com/godot-assets/props/kk_furniture/shelf_B_small.glb",
+     "pos": [
+      0.55,
+      -3.2
+     ],
+     "rot": 270
+    },
+    {
+     "url": "https://preview.myapping.com/godot-assets/props/kk_furniture/cabinet_small.glb",
+     "pos": [
+      -0.6,
+      -1.9
+     ],
+     "rot": 180
+    },
+    {
+     "url": "https://preview.myapping.com/godot-assets/props/kk_dungeon/barrel_small.glb",
+     "pos": [
+      0.0,
+      -7.0
+     ],
+     "rot": 40
     }
    ],
    "npc": {
     "id": "elder_sedge",
     "name": "Elder Sedge",
     "pos": [
-     -3.5,
-     2.6
+     -6.5,
+     2.2
     ],
     "persona": "the stooped old heron elder of Heronwade, standing on the boardwalk outside her big timber hut on the village square; she speaks one short, patient sentence at a time, full of swamp wisdom and worry about the fog",
     "lines": [
@@ -2137,10 +2189,10 @@
       "/cloud-do09d2jdlpivbwyjcag8/models/heron_villager.glb",
       "/cloud-do09d2jdlpivbwyjcag8/models/heron_fisher.glb"
      ],
-     "count": 3,
+     "count": 2,
      "vary": true,
      "behaviour": "wander",
-     "radius": 6,
+     "radius": 4,
      "speed": 1.1
     }
    ]
@@ -2193,10 +2245,10 @@
     {
      "part": {
       "shape": "cylinder",
-      "bottom_r": 0.15,
-      "top_r": 0.13,
       "height": 2.5,
-      "material": "timber"
+      "material": "timber",
+      "radius": 0.15,
+      "top_radius": 0.13
      },
      "from": [
       1.6,
@@ -2211,10 +2263,10 @@
     {
      "part": {
       "shape": "cylinder",
-      "bottom_r": 0.15,
-      "top_r": 0.13,
       "height": 2.5,
-      "material": "timber"
+      "material": "timber",
+      "radius": 0.15,
+      "top_radius": 0.13
      },
      "from": [
       4.4,
@@ -2229,10 +2281,10 @@
     {
      "part": {
       "shape": "cylinder",
-      "bottom_r": 0.15,
-      "top_r": 0.13,
       "height": 2.2,
-      "material": "timber"
+      "material": "timber",
+      "radius": 0.15,
+      "top_radius": 0.13
      },
      "from": [
       -6.5,
@@ -2362,10 +2414,10 @@
     {
      "part": {
       "shape": "cylinder",
-      "bottom_r": 0.15,
-      "top_r": 0.13,
       "height": 2.5,
-      "material": "timber"
+      "material": "timber",
+      "radius": 0.15,
+      "top_radius": 0.13
      },
      "from": [
       1.6,
@@ -2380,10 +2432,10 @@
     {
      "part": {
       "shape": "cylinder",
-      "bottom_r": 0.15,
-      "top_r": 0.13,
       "height": 2.5,
-      "material": "timber"
+      "material": "timber",
+      "radius": 0.15,
+      "top_radius": 0.13
      },
      "from": [
       4.4,
@@ -2427,7 +2479,7 @@
     2,
     6
    ],
-   "ground": "mud",
+   "ground": "grass",
    "scatter": [
     {
      "kind": "plant",
@@ -2479,7 +2531,7 @@
     3,
     -1
    ],
-   "ground": "mud",
+   "ground": "grass",
    "scatter": [
     {
      "kind": "plant",
@@ -2603,10 +2655,10 @@
     {
      "part": {
       "shape": "cylinder",
-      "bottom_r": 0.15,
-      "top_r": 0.13,
       "height": 2.2,
-      "material": "timber"
+      "material": "timber",
+      "radius": 0.15,
+      "top_radius": 0.13
      },
      "from": [
       -1.0,
@@ -2712,10 +2764,10 @@
     {
      "part": {
       "shape": "cylinder",
-      "bottom_r": 0.15,
-      "top_r": 0.13,
       "height": 2.5,
-      "material": "timber"
+      "material": "timber",
+      "radius": 0.15,
+      "top_radius": 0.13
      },
      "from": [
       -8.0,
@@ -2730,10 +2782,10 @@
     {
      "part": {
       "shape": "cylinder",
-      "bottom_r": 0.15,
-      "top_r": 0.13,
       "height": 2.5,
-      "material": "timber"
+      "material": "timber",
+      "radius": 0.15,
+      "top_radius": 0.13
      },
      "from": [
       -8.0,
@@ -2748,10 +2800,10 @@
     {
      "part": {
       "shape": "cylinder",
-      "bottom_r": 0.15,
-      "top_r": 0.13,
       "height": 2.2,
-      "material": "timber"
+      "material": "timber",
+      "radius": 0.15,
+      "top_radius": 0.13
      },
      "from": [
       0.0,
@@ -2766,10 +2818,10 @@
     {
      "part": {
       "shape": "cylinder",
-      "bottom_r": 0.12,
-      "top_r": 0.12,
       "height": 2.6,
-      "material": "timber"
+      "material": "timber",
+      "radius": 0.12,
+      "top_radius": 0.12
      },
      "from": [
       0.0,
@@ -2916,10 +2968,10 @@
     {
      "part": {
       "shape": "cylinder",
-      "bottom_r": 0.15,
-      "top_r": 0.13,
       "height": 2.2,
-      "material": "timber"
+      "material": "timber",
+      "radius": 0.15,
+      "top_radius": 0.13
      },
      "from": [
       -5.5,
@@ -3032,7 +3084,7 @@
     3,
     6
    ],
-   "ground": "mud",
+   "ground": "grass",
    "scatter": [
     {
      "kind": "plant",
@@ -3084,7 +3136,7 @@
     4,
     -1
    ],
-   "ground": "mud",
+   "ground": "grass",
    "scatter": [
     {
      "kind": "plant",
@@ -3208,10 +3260,10 @@
     {
      "part": {
       "shape": "cylinder",
-      "bottom_r": 0.15,
-      "top_r": 0.13,
       "height": 2.2,
-      "material": "timber"
+      "material": "timber",
+      "radius": 0.15,
+      "top_radius": 0.13
      },
      "from": [
       -5.0,
@@ -3317,10 +3369,10 @@
     {
      "part": {
       "shape": "cylinder",
-      "bottom_r": 0.15,
-      "top_r": 0.13,
       "height": 2.5,
-      "material": "timber"
+      "material": "timber",
+      "radius": 0.15,
+      "top_radius": 0.13
      },
      "from": [
       -8.0,
@@ -3335,10 +3387,10 @@
     {
      "part": {
       "shape": "cylinder",
-      "bottom_r": 0.15,
-      "top_r": 0.13,
       "height": 2.5,
-      "material": "timber"
+      "material": "timber",
+      "radius": 0.15,
+      "top_radius": 0.13
      },
      "from": [
       -8.0,
@@ -3438,10 +3490,10 @@
     {
      "part": {
       "shape": "cylinder",
-      "bottom_r": 0.15,
-      "top_r": 0.13,
       "height": 2.2,
-      "material": "timber"
+      "material": "timber",
+      "radius": 0.15,
+      "top_radius": 0.13
      },
      "from": [
       -3.5,
@@ -3554,7 +3606,7 @@
     4,
     6
    ],
-   "ground": "mud",
+   "ground": "grass",
    "scatter": [
     {
      "kind": "plant",
@@ -3791,10 +3843,10 @@
     {
      "part": {
       "shape": "cylinder",
-      "bottom_r": 0.15,
-      "top_r": 0.13,
       "height": 2.5,
-      "material": "timber"
+      "material": "timber",
+      "radius": 0.15,
+      "top_radius": 0.13
      },
      "from": [
       -8.0,
@@ -3809,10 +3861,10 @@
     {
      "part": {
       "shape": "cylinder",
-      "bottom_r": 0.15,
-      "top_r": 0.13,
       "height": 2.5,
-      "material": "timber"
+      "material": "timber",
+      "radius": 0.15,
+      "top_radius": 0.13
      },
      "from": [
       -8.0,
@@ -3827,10 +3879,10 @@
     {
      "part": {
       "shape": "cylinder",
-      "bottom_r": 0.15,
-      "top_r": 0.13,
       "height": 2.8,
-      "material": "timber"
+      "material": "timber",
+      "radius": 0.15,
+      "top_radius": 0.13
      },
      "from": [
       1.5,
@@ -3845,10 +3897,10 @@
     {
      "part": {
       "shape": "cylinder",
-      "bottom_r": 0.15,
-      "top_r": 0.13,
       "height": 2.8,
-      "material": "timber"
+      "material": "timber",
+      "radius": 0.15,
+      "top_radius": 0.13
      },
      "from": [
       1.5,
@@ -3923,8 +3975,8 @@
     "id": "fisher_skerrin",
     "name": "Skerrin",
     "pos": [
-     4.8,
-     0.5
+     -1.5,
+     0.8
     ],
     "persona": "a lanky, hunch-shouldered heron fisher standing at the end of the great pier over the deep swamp channel, lines trailing in the murk; one short gruff sentence, always about the catch, the water, or the old thing sleeping below the boards",
     "lines": [
@@ -4377,6 +4429,12 @@
    },
    "then": [
     {
+     "hud_hide": "stats"
+    },
+    {
+     "hud_hide": "health"
+    },
+    {
      "ambient": "crickets"
     },
     {
@@ -4508,7 +4566,9 @@
    "weapon",
    "potion",
    "stable",
-   "cycle"
+   "cycle",
+   "stats",
+   "health"
   ],
   "title": {
    "kicker": "OUT PAST THE REED ROAD",
@@ -4531,11 +4591,26 @@
    {
     "id": "wander",
     "label": "WANDER",
-    "caption": "Drift through the fog and meet the herons"
+    "caption": "Drift through the fog and meet the herons",
+    "chain": [
+     {
+      "id": "village_of_stilts",
+      "toast": "Follow the boardwalk east - Elder Sedge waits by the great hut."
+     }
+    ]
    }
   ],
   "music": {
    "default": "mystical"
   }
- }
+ },
+ "weapons": {
+  "rusty_sword": {
+   "name": "Reed Torch",
+   "kind": "melee",
+   "damage": 1,
+   "model": "props/kk_rpgtools/torch.glb"
+  }
+ },
+ "start_weapon": "rusty_sword"
 }
