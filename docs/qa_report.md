@@ -1,54 +1,79 @@
-# QA Report — foggy-stilt-village, multiplayer CONTINUE change
-**Scope:** data-only delta (world.json `multiplayer` block, `mp_respawn` rule, model-path rebase, README) on the already-shipped HERONWADE build. Export: /workspace/repo/out, served locally (two runs: plain + production-shaped `/cloud-iybqouv5yf6dymalatmc/` prefix with `/godot-assets/` CDN-proxied). Signed in through the REAL gate UI via Supabase-HTTP-over-Node (existing test account; no new accounts created).
-
-## VERDICT: FAIL (0 P0, 1 P1 must-fix)
-
-The delta is largely sound — sign-in, netcode config, model rebase, winnability, and normal play all verified green — but the change's own headline feature (`mp_respawn`: "real death + respawn instead of silent auto-heal") empirically delivers a **blocking full-screen DEFEATED modal on top of the already-respawned player**, contradicting the rule's intent and the engine's stated non-modal design. Fix (or consciously accept/revert the rule) before deploy.
+# QA Report — "Heronwade" combat/vehicles/boss expansion
+**Build:** joseb33w/foggy-stilt-village, working tree at `/workspace/repo` (see P1-2: the named branch does not exist), export `/workspace/repo/out`
+**QA method:** independent adversarial pass — fresh canonical verifier download + run, static world/quests/engine analysis, headless-Godot GLB clip checks, and 12 of my own auth-aware browser probes against the export (screenshots in `/workspace/verify-qa/`, logs `/tmp/qa-*.log`, verifier log `/tmp/verify-qa.log`). `out/world.json` restored byte-identical after probing.
 
 ---
 
-## ❗ P1 — player death shows a permanent blocking "DEFEATED / TRY AGAIN" modal over an already-respawned, healed player
-**Evidence (empirical, real damage path):** I hot-injected a QA rule via the game's own 4s world.json poll (served modified data from my test server — repo untouched): `{damage: 9999}` on `time_of_day_changed`, tripped with the engine's `gogiSetTime` hook. Console: `GOGI_RULE_FIRED qa_kill` → `GOGI_RULE_FIRED mp_respawn on=player_died`. Screenshots `verify/qa11_death.png` / `qa12_after_death.png`: the mp_respawn toast "The marsh takes you... and gives you back." renders at the top **while a full-screen DEFEATED modal covers the game**, and it never clears — held-W movement after 4s+ = **0.00 m** (input blocked). Clicking TRY AGAIN recovers (7.7 m movement after, `qb2_after_try_again.png`) but runs `main.restart_run()` — a **full run reset** (vars, rule state, opening sequence), not a respawn.
+## VERDICT: FAIL (1 P0)
 
-**Root cause (code order, pre-existing engine files):** `main.gd::take_damage()` (~line 1280, same pattern in `set_player_health()` ~1414): `director.fire("player_died")` runs the rule **synchronously first** — `mp_respawn`'s `respawn` calls `respawn_player(true)` → `clear_defeat()`, which no-ops because `game_shell._lost` is still false — and **then** `_show_defeat()` puts the modal up with nothing left to clear it. `game_shell.clear_defeat()`'s own comment says a world answering `player_died` with `respawn` must not keep the modal ("Leaving the modal up over a living, moving player is wrong in any world that respawns") — the call ordering defeats that design.
+The build is rich, well-wired and almost entirely healthy — but **the final boss fight is dead**, and the boss kill is the literal win condition (`goal: complete_quest rout_of_the_reeds` → `kill murk_reaver ×1`). As shipped, the game cannot be won.
 
-**Reachability:** this world has no single-player damage sources, so it only fires on multiplayer PvP hits (`netsync.hit_taken` → `take_damage`) — i.e. exactly the mode this change ships. README explicitly advertises "hits all sync."
+---
 
-**Fix direction (coordinator's choice):**
-- Engine fix (1 line-ish, main.gd): call `_show_defeat()` **before** `director.fire("player_died")` so a rule's `respawn` clears it; or suppress `_show_defeat()` when the world's `player_died` rules contain a `respawn` action.
-- Data-only fallback: drop the `mp_respawn` rule — `wants_death()` reverts to false and the engine's non-modal heal-in-place + strong hurt-flash returns (pre-change shipped behavior). Loses the "real death" feature but ships clean.
-- Do NOT ship as-is: a PvP death = blocked screen + run-resetting button.
+## ❌ P0-1 — Murk Reaver never appears, never engages, cannot be hit: the game is unwinnable in practice
 
-## ⚠️ Warns / observations (not ship-blockers)
-- **Uncommitted delta:** the repo has NO `feat/multiplayer` branch — the change exists only as uncommitted working-tree edits on `main` (`git status`: M world.json/README/PLAN + 2 untracked .import files). Commit/push before deploy or the change ships from nowhere.
-- **Region banner overlaps quest log (portrait):** "The Reed Road" title renders across the quest-log's 4th line (`qa6_moved.png`, also in the pre-existing `game0.png`). Cosmetic, pre-existing, portrait only.
-- **Canonical verify FAIL disposition — CONFIRMED SOUND:** `verify.mjs` exits 1 solely on "RULE LAYER NEVER RAN" because the generic harness can't type into the sign-in gate. Auth-aware runs prove the layer alive in real play: `start_amb`, `seen_gate` fired in normal wandering; `mp_respawn` fired on a driven death; `GOGI_RULES loaded vars=1 rules=10`. Harness limitation, not a game bug.
-- **Audio:** infra present (verify: AudioManager/players/bus OK), `start_amb` ambient rule fired; actual playback unverifiable in the muted container.
-- **Localhost-only placeholder noise:** serving out/ WITHOUT the CDN, shared props (`/godot-assets/props/...` torch/trees/bushes/rocks) 404 → gray placeholders. All 10 such paths return **200 from preview.myapping.com** (curl-verified) and render correctly when proxied (`qb1_game_prod_assets.png`: trees, bushes, logs, torch-in-hand). Environment artifact of local serving, not a build defect — listed so nobody re-flags it.
+**Evidence (4 independent sessions, ~6 min total at/near the boss):**
+- The boss bar "THE MURK REAVER" shows full — and per `game_shell.gd:_update_boss_bar()` the bar is only visible when a **live** `murk_reaver` instance is within `show_within` 60 m → the boss **does spawn and is alive**.
+- Enemy placement is deterministic (`chunk_manager.gd` ~line 1196): a single enemy spawns on a ring r = `half*0.45` ≈ **3.6 m from the cell centre**, i.e. ≈ **(219.6, 200)** for cell [13,12]. My probe walked the player to that exact point and **circled it at 2.8–4.9 m for 8 legs, then clicked ATTACK for 60 s** (Heron Talon Blade equipped, 60 dmg): **no reaver visible anywhere** (a 5 m-tall boss!), **no `player_damaged`**, **no `bounty_reaver`**, HP 100/100 both ways (`qa-boss-at-spawnpoint.png`, `qa-boss-end.png`, `/tmp/qa-boss6.log`).
+- Standing on the dry island top 25–35 m away for 110 s: boss never approached (its minimap dot never moved), despite `enemy.gd`'s explicit "creatures chase from any distance" design (`/tmp/qa-boss5.log`, `qa-boss-t1.png`).
+- **Root cause:** cell [13,12]'s centre area is **flooded** — my `gy` readings around the spawn ring were **−1.4 … −4.1 m vs water level −0.3** (the cell sits on the canyon-carved NE slope of the delta cone). The reaver spawns into 1–4 m-deep water/ground and ends up invisible (below the opaque water/terrain), immobile and out of everyone's reach. Contrast: rats/pirates/lurkers, whose cell centres are dry, all spawn, chase and fight correctly (verified — see passes below).
+- Collateral in the same cell: the **Heron Talon Blade chest at [13,12] pos [4,4] ≈ (220,204)** is placed at `_ground_y` → also 1–4 m underwater; likely un-openable (minor, the blade is also gifted by the `talon_gift` rule).
 
-## ✅ Verified green (real deltas, real renders)
-| Check | Evidence |
-|---|---|
-| Sign-in gate appears, correct copy | `qa2_gate.png` — "Sign in to play / saves your progress and plays with others", email+password, eye-toggle, Create one, Forgot password |
-| Error states legible | Empty submit → "Enter a valid email address."; wrong password → red "Invalid login credentials" (`qa3_gate_error.png`); recovery to successful sign-in in same session |
-| Auth passes via real UI | `GOGI_AUTH signed in uid=3f6dbd7c…` → `gate passed`; Supabase HTTP proxied through Node (container TLS block is env-only) |
-| Session persistence | Page reload → `GOGI_AUTH restored existing session — no prompt` (no second login) |
-| Multiplayer config live | `GOGI_MP enabled max_players=6`; `GOGI_MP resolved map=- room=cloud-iybqouv5yf6dymalatmc` (build-derived room under production path shape; empty-room in run 1 was my server serving at `/` — artifact) |
-| Netsync doesn't degrade SP play | wss blocked in-container → only `[Net]` warnings; zero real console errors across both runs; movement/rules/quests all functional with netsync running |
-| Realtime transport (from Node) | Re-ran nettest.mjs with world.json's exact URL+anon key: both clients SUBSCRIBED to `game:cloud-iybqouv5yf6dymalatmc-nettest`, A received B's broadcast — PASS |
-| Model rebase (change 3) | All 5 refs `/cloud-iybqouv5yf6dymalatmc/models/meshy/*.glb` ↔ files in out/models/meshy/ match; wanderer + heron_villager fetched+rendered in-game; `GOGI_HERO native avatar attached (char_h=1.729)`; **zero GOGI_PLACEHOLDER / zero 404** in the production-shaped run |
-| Meshy characters render (no gray boxes) | `qa7_npc.png` / `qa9_day.png`: textured yellow-coat wanderer (animating, feet grounded, `GOGI_HERO_SEAT 0.005`), dark heron NPC beside him |
-| Movement + camera | Held W = 9.4 m real position delta; right-half drag = 1.33 rad cam_yaw delta (orbit works, no floor-stare) |
-| NPC interaction | Walked to Pelli (12.8 m → 1.5 m), prompt "USE > Talk to Pelli", `try_use()` fired talk → 2 requests to npc.myapping.com (brain+speak) |
-| Quest log + HUD | Village of Stilts 4-step log, minimap, region banner, PLACES SEEN counter (increments 0→1), JUMP/USE, HP/XP/Gold bar all present |
-| mp_respawn well-formed | Static: `GOGI_RULES loaded rules=10`, rule fires on event, toast + respawn actions execute (the modal issue above is engine ordering, not rule syntax) |
-| Winnability | Canonical verify: "quest-graph OK — world is winnable (project world.json, 64 areas)" — unchanged by delta |
-| Night/day both readable | `qa8_night.png` (deep blue, boardwalk + hero readable, not black) / `qa9_day.png` (no blow-out; luma clipped=0.0% in verify log) — driven deterministically via gogiSetTime |
-| Mobile fill | Portrait 390×844 + landscape 860×400 both fill all corners, HUD inside rect, no letterboxing (`qa10_landscape.png`) |
-| Native tier | manifest.json: `webOnly: false`, world.json present — native-playable |
-| Packaging / budget / scenes | Canonical: pck 5.1MB OK, scene pass 35/0, GPU peak 51MB/220MB budget, console clean |
+**Note:** `qgcheck` reports the world winnable — the quest **graph** is fine; this is a physical/placement failure qgcheck cannot see.
+
+**Fix direction:** put the boss's spawn ring on dry land — e.g. move the boss (+chest) to a cell whose centre is on the island top (cell [12,11], centre (200,184) = cone summit, height ≈ +15), or add a terrain feature (basin-inverse / raise) so [13,12]'s centre clears water, or author `enemy_aquatic: true` + a larger `enemy_range` so a flooded reaver still swims up and engages. Then re-verify end-to-end: point-blank engage (`player_damaged`), kill (`bounty_reaver` fires, bar drains/empties), talon chest reachable, and the `rout_of_the_reeds` → victory panel chain.
+
+---
+
+## ❗ P1 issues
+
+**P1-1 — Boss-fight verification debt behind P0-1.** Because the boss never engages, the following ship-claims remain **unverified**: reaver model/animation in-game (GLB itself is healthy: `idle/walk/attack/death` + skeleton + real textures, verified headless), boss-bar drain on hit, `bounty_reaver` toast, quest-4 completion, victory panel + victory music. All are engine-standard machinery (kill→rule chain proven with rat_bandit), but after the P0 fix the whole boss loop needs one real kill-run.
+
+**P1-2 — Delivery/branch state: `feat/combat-vehicles-expansion` does not exist; the expansion is uncommitted.** The repo is on `main` at `08297e1` with the entire expansion sitting as **uncommitted working-tree changes** (world.json +21 853 lines modified, quests.json, README, meshy_assets.jsonl, ~14 untracked new files incl. `models/meshy/*.glb` for all combat/vehicle assets and 3 new audio tracks). `git branch -a` shows only `main`. One crash/reset loses the build; the named PR branch can't be reviewed. Commit + push before ship.
+
+---
+
+## ⚠️ Polish / notes (non-blocking)
+
+1. **Skiff nose metric ambiguous:** boat boards, travels 8.5 m and exits cleanly, but `veh_nose_dot_fwd ≈ 0` (drive = 1.0, fly = 0.99). Visually the skiff reads bow-forward with the player standing amidships (`qa-boat-seated.png`) — likely the fused GLB's authored axis vs the mount yaw. Worth one on-device glance that it doesn't travel broadside.
+2. **Plane rider fully hidden:** boarding the Dragonfly the wanderer disappears into the fuselage (`qa-fly-seated.png`) — acceptable "closed cab", but a visible head/canopy would read better. Buggy is correct (rider visibly seated in the cab, `qa-drive-seated.png`).
+3. **Vostok props render near-white** (MS_Tent, MS_Crate, MS_Plank_Pile at camps/anchorage) — reads slightly untextured under fog + software-GL (`qa-anchorage-a.png`); expected to look right on device, but check once.
+4. **Bog lurkers are near-silhouette dark** in fog (`qa-mirewood-a.png`) — dramatic but borderline readability; a touch of rim/emissive or lighter albedo would help.
+5. **Reed Runner spawns in cell [9,6] with 2 aquatic pike_pirates** — boarding it is contested; if intentional (ambush), fine.
+6. **Title wraps "HERON WADE"** on two lines in portrait (`probe-title.png`) — cosmetic.
+7. Coordinator's `luma-night.png` is actually the sign-in gate, not a night frame — harmless (sky is pinned `{time: day, weather: fog}`, no night phase exists), but the artifact is mislabeled.
+8. Worst frame 233 ms (under the 250 ms bar) — acceptable; average-fps numbers are container artifacts, ignored.
+
+---
+
+## ✅ What passed (with the evidence read)
+
+| Dimension | Result | Evidence |
+|---|---|---|
+| Boot / console | ✅ | verifier: engine booted, canvas, **console clean**; scene-instantiation 35/0 failed |
+| qgcheck winnability (graph) | ✅ | "quest-graph OK — world is winnable (576 areas)" (but see P0-1) |
+| Kill-count feasibility | ✅ | quests need 6/3/4/1 kills vs authored 10 rats / 6 lurkers / 8 pirates / 1 reaver |
+| Rules layer | ✅ | `start_amb` fired post-auth in **every** probe; `seen_*` region rules fire; coordinator's kill/bounty/hurt rules re-confirmed (rat chain) |
+| Movement + camera | ✅ | 5.5 m on W; drag-look 1.08 rad; camera collision works (no wall clipping) |
+| No autofire-on-look | ✅ | attack is a dedicated button; look-drag fired zero attack/kill rules (asserted); HP/bounty unchanged |
+| Combat: enemies engage + damage both ways | ✅ | rats: HP 46→10 between frames, surrounded player (`qa-camp-*.png`); lurkers: HP 16→44 (died + **in-place respawn, no modal death UI**); pirates converge (`qa-anchorage-*.png`); kill chain (attack→death→`bounty_rat`+`first_rat`) from coordinator's combat probe |
+| Enemy models / clips / no T-pose | ✅ | all 4 combat GLBs: idle/walk/attack/death + skeleton (headless check); rats/pirates/lurkers textured + animated + correct facing in-game; **0 GOGI_PLACEHOLDER** once CDN proxied (in-container placeholder lines are a chromium-TLS sandbox artifact — asset URLs all 200) |
+| Enemy stats sanity | ✅ | 70/6, 180/14, 110/9, 480/18 authored per cell; 55 % per-hit cap → min 2 hits on everything; talon 60 dmg → 8-hit boss |
+| Weapons catalog + chests | ✅ | 6 weapon defs match chest contents at [4,2],[3,-4],[-6,3],[12,2],[13,12] + `talon_gift` rule on `clear_the_waters`; start weapon = restatted `rusty_sword` → "Reed Torch" 18 dmg (renders in hand) |
+| Weapon-in-hand | ✅ | torch gripped (multiple shots); talon blade gripped at boss (`qa-boss-island.png`); bow/staff are parametric (not visually sampled — low risk) |
+| Vehicles board/travel/exit | ✅ | all 3 profiles via the real `try_use` path; buggy nose-first dot=1.0, upright; plane dot=0.99, airborne dy=2.6 (coordinator) ; boat rides water y=−0.23; DISMOUNT affordance appears |
+| World persistence / boundary | ✅ | walked into the west border cell: **invisible edge wall stops the player at x≈−127** (78 s of held W, x unchanged); world keeps rendering, engine alive (`qa-edge-offgrid.png`) — no world-vanish possible |
+| World richness / density | ✅ | land side: 360 cells, **avg ~41 entities/cell, 0 empty**; village byte-preserved (64 cells, only the disclosed [4,2] chest added — `check_preservation.py`); roads render on the causeway; camps have tents/campfires/crates; anchorage has props+structure+chest; boss delta has skull-totems/graves. Verifier SPARSE warn (~1.9/cell) is bay-dominated: 216 open-water cells at 0.9 — intentional boat space |
+| Art / style | ✅ | foggy muted swamp reads as authored: textured mud/sand/grass grounds up close, fog-graded horizon, no grey ceiling slab (fog-white sky is the weather), textured hero (bearded wanderer in ochre oilskin) + heron NPC models, feet on ground (`foot_raw` ≈ 0.05) |
+| Mobile fill / HUD | ✅ | portrait 720×1280 and 400×860 + landscape 860×400 all full-bleed, four corners, HUD inside, no overlaps; `GOGI_HUD_FIT` auto-moved bounty/explored to the bottom corners to avoid the stats stack |
+| Budgets | ✅ | pck 11 MB; GPU peak observed 82 MB video / 33 MB tex (of 220 budget) incl. camp/anchorage/boss areas; LIVE_ENEMY_BUDGET caps skinned enemies |
+| Native tier | ✅ | `manifest.json`: `webOnly: false`, world.json data-driven, requires rules+hud |
+| Audio presence | ✅ | AudioManager + bus layout + 20 tracks incl. new road/boat/tension; regions reference existing files; verifier audio pass silent (no warn) |
+| Meshy sourcing | ✅ | every character/creature/vehicle is Meshy (`models/meshy_assets.jsonl` prompts match shipped GLBs); kk_* items are props/rig-donors only; hero/NPC `/cloud-iybqouv5yf6dymalatmc/…` URLs are self-healed by `main.gd:_norm` onto the current build id (files present locally — works) |
+| Preservation | ✅ | original 64 village cells byte-identical except the disclosed chest |
+| Tofu / debug text | ✅ | none in any frame; apostrophes render |
 
 ## Could not verify (sandbox limits)
-In-engine wss to Supabase from Chromium (container TLS block — transport proven from Node instead); real 2-device peer rendering (peer_body spawn/cull paths untested live); real audio playback; true-GPU fidelity; touch feel. World-boundary/streaming persistence not re-walked — pre-existing shipped content, unchanged by this data-only delta.
-
-**Test account used:** the coordinator-supplied `verify-cloud-iybqouv5yf6dymalatmc@example.com` only; no new accounts created. My artifacts: `/workspace/verify/qa-probe.mjs`, `qa-probe2.mjs`, `qa*.png`, `qb*.png`. Repo untouched.
+- Real-device GPU fidelity (vostok prop whiteness, lurker darkness — flagged above as polish), audio playback, touch feel.
+- Browser↔Supabase realtime (in-container chromium cannot TLS to supabase/CDN at all — even plain fetches fail; the transport was proven from node by the coordinator's 2-client test, and auth works through the local proxy in all 12 of my probes). True 2-client sync, host-election and cross-area cull are untestable here.
+- Full quest-chain playthrough (talk/collect/reach steps of quests 1–3) — machinery is engine-standard and rules fire, but no end-to-end run was driven; the boss re-verify after the P0 fix should walk the chain's final step anyway.

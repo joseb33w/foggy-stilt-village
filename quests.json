@@ -1,52 +1,88 @@
 {
-  "quests": [
+ "quests": [
+  {
+   "id": "village_of_stilts",
+   "name": "Village of Stilts",
+   "auto_start": false,
+   "giver": "elder_sedge",
+   "steps": [
     {
-      "id": "village_of_stilts",
-      "name": "Village of Stilts",
-      "auto_start": false,
-      "giver": "elder_sedge",
-      "steps": [
-        {
-          "id": "meet",
-          "objective": {
-            "type": "talk_to",
-            "target": "elder_sedge"
-          },
-          "desc": "Find Elder Sedge near the great hut"
-        },
-        {
-          "id": "charm",
-          "objective": {
-            "type": "collect",
-            "target": "heron_charm"
-          },
-          "desc": "Step inside the elder's hut and take the heron charm"
-        },
-        {
-          "id": "pier",
-          "objective": {
-            "type": "reach_area",
-            "target": "c5_2"
-          },
-          "desc": "Walk out onto the great pier"
-        },
-        {
-          "id": "murk",
-          "objective": {
-            "type": "talk_to",
-            "target": "old_catfish"
-          },
-          "desc": "Whisper a greeting to Old Murk below the pier"
-        }
-      ],
-      "rewards": {
-        "xp": 80,
-        "gold": 0
-      },
-      "on_complete_flags": [
-        "fog_settled"
-      ]
+     "id": "meet",
+     "objective": { "type": "talk_to", "target": "elder_sedge" },
+     "desc": "Find Elder Sedge near the great hut"
+    },
+    {
+     "id": "charm",
+     "objective": { "type": "collect", "target": "heron_charm" },
+     "desc": "Step inside the elder's hut and take the heron charm"
+    },
+    {
+     "id": "pier",
+     "objective": { "type": "reach_area", "target": "c5_2" },
+     "desc": "Walk out onto the great pier"
+    },
+    {
+     "id": "murk",
+     "objective": { "type": "talk_to", "target": "old_catfish" },
+     "desc": "Whisper a greeting to Old Murk below the pier"
     }
-  ],
-  "director_managed": true
+   ],
+   "rewards": { "xp": 80, "gold": 0 },
+   "on_complete_flags": [ "fog_settled" ]
+  },
+  {
+   "id": "arm_the_village",
+   "name": "Bandits on the Causeway",
+   "auto_start": false,
+   "giver": "causeway_tinker",
+   "steps": [
+    {
+     "id": "tinker",
+     "objective": { "type": "talk_to", "target": "causeway_tinker" },
+     "desc": "Find Tinker Rasp by the marsh buggy on the Old Causeway (north)"
+    },
+    {
+     "id": "bandits",
+     "objective": { "type": "kill_count", "target": "rat_bandit", "count": 6 },
+     "desc": "Drive off 6 reed bandits from the causeway camps"
+    }
+   ],
+   "rewards": { "xp": 120, "gold": 40 },
+   "on_complete_flags": [ "causeway_clear" ]
+  },
+  {
+   "id": "clear_the_waters",
+   "name": "Mire and Murk",
+   "auto_start": false,
+   "steps": [
+    {
+     "id": "lurkers",
+     "objective": { "type": "kill_count", "target": "bog_lurker", "count": 3 },
+     "desc": "Put down 3 bog lurkers in the Mirewood (west)"
+    },
+    {
+     "id": "pirates",
+     "objective": { "type": "kill_count", "target": "pike_pirate", "count": 4 },
+     "desc": "Sink 4 pike pirates at the Anchorage (sail east across the Broad Murk)"
+    }
+   ],
+   "rewards": { "xp": 200, "gold": 80 },
+   "on_complete_flags": [ "waters_clear" ]
+  },
+  {
+   "id": "rout_of_the_reeds",
+   "name": "Rout of the Reeds",
+   "auto_start": false,
+   "steps": [
+    {
+     "id": "reaver",
+     "objective": { "type": "kill_count", "target": "murk_reaver", "count": 1 },
+     "desc": "Defeat the Murk Reaver on the delta island (south-east, by boat or plane)"
+    }
+   ],
+   "rewards": { "xp": 400, "gold": 150 },
+   "on_complete_flags": [ "reeds_routed" ]
+  }
+ ],
+ "director_managed": true
 }
