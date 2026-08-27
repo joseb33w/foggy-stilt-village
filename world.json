@@ -20441,7 +20441,25 @@
       -5.0
      ]
     }
-   ]
+   ],
+   "enemies": 1,
+   "enemy_type": "murk_reaver",
+   "enemy_hp": 480,
+   "enemy_damage": 18,
+   "enemy_speed": 0.85,
+   "enemy_height": 3.4,
+   "enemy_model": "/cloud-cimwbwzhmp76phh40et8/models/meshy/murk_reaver.glb",
+   "chest": {
+    "pos": [
+     4.0,
+     -4.0
+    ],
+    "contents": [
+     "heron_talon_blade"
+    ],
+    "gold": 60
+   },
+   "enemy_aquatic": true
   },
   {
    "cell": [
@@ -20816,24 +20834,7 @@
      "roof_material": "thatch",
      "rot": 0
     }
-   ],
-   "chest": {
-    "pos": [
-     4.0,
-     4.0
-    ],
-    "contents": [
-     "heron_talon_blade"
-    ],
-    "gold": 60
-   },
-   "enemies": 1,
-   "enemy_type": "murk_reaver",
-   "enemy_hp": 480,
-   "enemy_damage": 18,
-   "enemy_speed": 0.85,
-   "enemy_height": 5.0,
-   "enemy_model": "/cloud-cimwbwzhmp76phh40et8/models/meshy/murk_reaver.glb"
+   ]
   },
   {
    "cell": [
@@ -21256,16 +21257,16 @@
  },
  "hud": [
   {
-   "bind": "explored",
-   "format": "int",
-   "pos": "top_right",
-   "label": "PLACES SEEN"
-  },
-  {
    "bind": "bounty",
    "format": "int",
-   "pos": "top_left",
+   "pos": "bottom_left",
    "label": "BOUNTY"
+  },
+  {
+   "bind": "explored",
+   "format": "int",
+   "pos": "bottom_left",
+   "label": "PLACES SEEN"
   }
  ],
  "rules": [
@@ -21275,6 +21276,9 @@
     "event": "start"
    },
    "then": [
+    {
+     "hud_hide": "stats"
+    },
     {
      "ambient": "crickets"
     },
@@ -21620,7 +21624,8 @@
  ],
  "director": {
   "hide_hud": [
-   "stable"
+   "stable",
+   "stats"
   ],
   "title": {
    "kicker": "OUT PAST THE REED ROAD",
