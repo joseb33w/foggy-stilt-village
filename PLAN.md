@@ -1,45 +1,39 @@
 # Goal
-Add multiplayer to Heronwade so friends who open the same game link share the
-village: see each other, walk together, and stay identifiable.
+Turn Heronwade from a peaceful stroll into a bigger open world with combat and
+rides: hostile characters to fight (three factions + a boss), a weapons
+progression the player collects and uses, and a world large enough to drive a
+car, pilot a boat, and fly a plane — all as world.json DATA on the existing
+rpg engine (no game-authored scripts, native-tier preserved).
 
-# Files touched
-- `world.json` — added the `multiplayer` block (enabled, max_players 6, Supabase
-  URL + publishable anon key; implies the engine sign-in gate). Rebased the five
-  Meshy model refs from the stale previous-build prefix to the committed
-  `models/meshy/` paths (fixes asset 404s). Made the title backdrop opaque
-  (`director.title.bg` alpha 0.94 → 1.0) so the sign-in form no longer ghosts
-  through the title screen.
-- `auth_gate.gd` — scale-aware touch metrics: the project stretches a 720-wide
-  base viewport onto ~390pt phones, so the gate's "44pt" fields rendered ~24pt.
-  Sizes/fonts now multiply by canvas-units-per-screen-point (clamped ≥1 so
-  desktop is unchanged), restoring real 44pt+ tap targets.
-- `README.md` — documents the multiplayer behavior and private rooms.
+# Files to touch
+- `world.json` — grid expanded 8×8 → 24×24 (x/z ∈ [-8..15], ~384 m across),
+  existing 64 village cells preserved verbatim. New biomes: the Broad Murk bay
+  (east, terrain carved below water level, boatable), the Reed Barrens + Old
+  Causeway road grid (north, drivable), the Mirewood bog (west), Dragonfly
+  Strip airstrip + the Reaver's Delta (south). New: `weapons` catalog +
+  chest drops, per-cell enemy camps (`rat_bandit`, `pike_pirate`, `bog_lurker`,
+  boss `murk_reaver` with Meshy models), world-level `vehicles[]` (car, boat,
+  plane — Meshy multi-part bodies), new regions + vars/rules/hud (bounty,
+  faction kill scoring), director boss bar + victory, combat HUD unhidden,
+  `max_players` raised to 16 for the bigger map.
+- `quests.json` — director chain extended: village_of_stilts →
+  arm_the_village → clear_the_waters → rout_of_the_reeds (boss).
+- `models/meshy/` — new rigged enemy GLBs + vehicle part GLBs (Meshy specialist).
+- `README.md` — updated feature description.
 
-Decision of note: a `player_died → toast + respawn` rule was added, then REMOVED
-after both QA and Game-Feel specialists proved (empirically) that the engine
-fires `_show_defeat()` AFTER the rule runs — a blocking DEFEATED/TRY AGAIN modal
-lands on the already-respawned player, and TRY AGAIN does a full run reset. An
-engine patch here would fix only the web build while native players (who run the
-canonical engine) still got the broken modal, so the world does not opt into
-death: the engine's seamless heal-in-place default applies. Engine-side call
-ordering is reported as a follow-up.
-
-# Verification
-- qgcheck winnable; canonical verify.mjs green on packaging (5.1MB pck), scene
-  instantiation 35/0, GPU 51/220MB, zero 404s/placeholders, console clean. Its
-  one FAIL ("RULE LAYER NEVER RAN") is a known harness limitation — the generic
-  harness cannot type into the sign-in gate; an auth-aware probe
-  (verify/auth-probe.mjs technique) signed in through the real UI and proved the
-  same signal green (rules fired, movement, camera, netsync engaged
-  max_players=6). QA independently confirmed this disposition sound.
-- 2-client Node Realtime transport test: both clients subscribed to the engine's
-  topic shape with world.json's exact creds; A received B's broadcast.
-- Independent QA + Game-Feel specialist passes (reports in docs/); all P0/P1
-  findings fixed and re-proven before ship.
+# Verification approach
+qgcheck (winnability incl. kill-count feasibility), canonical verify.mjs on the
+export (packaging, GPU budget, rules-alive), targeted checks: combat delta
+(enemy hp drops via real attack path), enemy AI engages, vehicle board/drive,
+clip resolution on new enemy rigs, mobile two-aspect fill. Game-Feel + QA
+specialist passes before ship.
 
 # Out of scope
-- PvP scoring / deathmatch rules (co-op stroll; the only weapon is a 1-damage
-  reed torch).
-- Shared/host-authoritative NPCs or quest state (engine syncs position, facing,
-  shots and hits; quest progress stays per-player).
-- Leaderboards or any new backend tables (Realtime broadcast needs none).
+- PvP death scoring (`player_died` rules) — deliberately omitted: the engine
+  fires its blocking defeat modal after the rule runs (documented engine
+  follow-up from the previous session), so death keeps the engine's forgiving
+  heal-in-place default.
+- New enterable interiors (the elder's hut interior is preserved unchanged).
+- Enemy in-hand weapon meshes — enemy armament is expressed as data
+  (damage/range/speed profiles + faction weapon drops); the engine attaches
+  weapon visuals to the player only.
