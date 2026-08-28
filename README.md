@@ -30,8 +30,8 @@ A 24×24-cell chunk-streamed open world (~384 m across):
 - **Dragonfly Strip** (south) — an airstrip with the Dragonfly seaplane.
 - **The Reaver's Delta** (south-east) — the boss island, reached by boat or plane.
 - **The Dragon's Roost** (far south-west) — a bone-strewn lair in the bog where
-  the **Mire Dragon** circles overhead: an aerial boss that swoops to attack and
-  guards a hoard chest holding the Dragonfang.
+  the **Mire Dragon** stalks: a hulking marsh dragon boss that guards a hoard
+  chest holding the Dragonfang.
 
 ## Weapons
 A seven-piece arsenal, all data-driven: the Reed Torch (starter), Fisher's Gaff,

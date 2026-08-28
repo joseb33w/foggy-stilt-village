@@ -1,79 +1,94 @@
-# QA Report — "Heronwade" combat/vehicles/boss expansion
-**Build:** joseb33w/foggy-stilt-village, working tree at `/workspace/repo` (see P1-2: the named branch does not exist), export `/workspace/repo/out`
-**QA method:** independent adversarial pass — fresh canonical verifier download + run, static world/quests/engine analysis, headless-Godot GLB clip checks, and 12 of my own auth-aware browser probes against the export (screenshots in `/workspace/verify-qa/`, logs `/tmp/qa-*.log`, verifier log `/tmp/verify-qa.log`). `out/world.json` restored byte-identical after probing.
+# QA Report — Heronwade "Village on Stilts" · Mire Dragon session (CONTINUE build)
+
+**Build:** repo `/workspace/repo` (branch `main`, delta uncommitted), export `/workspace/repo/out`,
+BUILD_ID `cloud-hdro8hilebm5ifgmt2hy` · world.json md5 `e5e2d56faf67d4aaf6c0ada4fa47940c` (final state verified)
+
+## VERDICT: PASS (0 P0) — with 1 P1 and polish notes below
+
+⚠️ **IMPORTANT CONTEXT — the build changed mid-QA.** The dragon I was delegated to review
+(aerial: `enemy_aerial:true, hover 5.0, height 4.5, range 6.0`) was **rewritten by you at ~03:39
+while my probes ran** into a **grounded** boss (`enemy_height: 2.2`, no aerial/hover/range keys).
+I verified BOTH revisions. That change was the right call — my probes had independently proven the
+aerial revision **unwinnable in melee** (details in §2). Everything below headed "CURRENT" is
+verified against the final bytes (md5 above); the export `out/` world.json is identical to the repo
+world.json, and `index.pck` is unchanged since 02:35 (md5-matched across all my probe copies).
 
 ---
 
-## VERDICT: FAIL (1 P0)
+## 1. What passes (CURRENT build, real evidence)
 
-The build is rich, well-wired and almost entirely healthy — but **the final boss fight is dead**, and the boss kill is the literal win condition (`goal: complete_quest rout_of_the_reeds` → `kill murk_reaver ×1`). As shipped, the game cannot be won.
-
----
-
-## ❌ P0-1 — Murk Reaver never appears, never engages, cannot be hit: the game is unwinnable in practice
-
-**Evidence (4 independent sessions, ~6 min total at/near the boss):**
-- The boss bar "THE MURK REAVER" shows full — and per `game_shell.gd:_update_boss_bar()` the bar is only visible when a **live** `murk_reaver` instance is within `show_within` 60 m → the boss **does spawn and is alive**.
-- Enemy placement is deterministic (`chunk_manager.gd` ~line 1196): a single enemy spawns on a ring r = `half*0.45` ≈ **3.6 m from the cell centre**, i.e. ≈ **(219.6, 200)** for cell [13,12]. My probe walked the player to that exact point and **circled it at 2.8–4.9 m for 8 legs, then clicked ATTACK for 60 s** (Heron Talon Blade equipped, 60 dmg): **no reaver visible anywhere** (a 5 m-tall boss!), **no `player_damaged`**, **no `bounty_reaver`**, HP 100/100 both ways (`qa-boss-at-spawnpoint.png`, `qa-boss-end.png`, `/tmp/qa-boss6.log`).
-- Standing on the dry island top 25–35 m away for 110 s: boss never approached (its minimap dot never moved), despite `enemy.gd`'s explicit "creatures chase from any distance" design (`/tmp/qa-boss5.log`, `qa-boss-t1.png`).
-- **Root cause:** cell [13,12]'s centre area is **flooded** — my `gy` readings around the spawn ring were **−1.4 … −4.1 m vs water level −0.3** (the cell sits on the canyon-carved NE slope of the delta cone). The reaver spawns into 1–4 m-deep water/ground and ends up invisible (below the opaque water/terrain), immobile and out of everyone's reach. Contrast: rats/pirates/lurkers, whose cell centres are dry, all spawn, chase and fight correctly (verified — see passes below).
-- Collateral in the same cell: the **Heron Talon Blade chest at [13,12] pos [4,4] ≈ (220,204)** is placed at `_ground_y` → also 1–4 m underwater; likely un-openable (minor, the blade is also gifted by the `talon_gift` rule).
-
-**Note:** `qgcheck` reports the world winnable — the quest **graph** is fine; this is a physical/placement failure qgcheck cannot see.
-
-**Fix direction:** put the boss's spawn ring on dry land — e.g. move the boss (+chest) to a cell whose centre is on the island top (cell [12,11], centre (200,184) = cone summit, height ≈ +15), or add a terrain feature (basin-inverse / raise) so [13,12]'s centre clears water, or author `enemy_aquatic: true` + a larger `enemy_range` so a flooded reaver still swims up and engages. Then re-verify end-to-end: point-blank engage (`player_damaged`), kill (`bounty_reaver` fires, bar drains/empties), talon chest reachable, and the `rout_of_the_reeds` → victory panel chain.
-
----
-
-## ❗ P1 issues
-
-**P1-1 — Boss-fight verification debt behind P0-1.** Because the boss never engages, the following ship-claims remain **unverified**: reaver model/animation in-game (GLB itself is healthy: `idle/walk/attack/death` + skeleton + real textures, verified headless), boss-bar drain on hit, `bounty_reaver` toast, quest-4 completion, victory panel + victory music. All are engine-standard machinery (kill→rule chain proven with rat_bandit), but after the P0 fix the whole boss loop needs one real kill-run.
-
-**P1-2 — Delivery/branch state: `feat/combat-vehicles-expansion` does not exist; the expansion is uncommitted.** The repo is on `main` at `08297e1` with the entire expansion sitting as **uncommitted working-tree changes** (world.json +21 853 lines modified, quests.json, README, meshy_assets.jsonl, ~14 untracked new files incl. `models/meshy/*.glb` for all combat/vehicle assets and 3 new audio tracks). `git branch -a` shows only `main`. One crash/reset loses the build; the named PR branch can't be reviewed. Commit + push before ship.
-
----
-
-## ⚠️ Polish / notes (non-blocking)
-
-1. **Skiff nose metric ambiguous:** boat boards, travels 8.5 m and exits cleanly, but `veh_nose_dot_fwd ≈ 0` (drive = 1.0, fly = 0.99). Visually the skiff reads bow-forward with the player standing amidships (`qa-boat-seated.png`) — likely the fused GLB's authored axis vs the mount yaw. Worth one on-device glance that it doesn't travel broadside.
-2. **Plane rider fully hidden:** boarding the Dragonfly the wanderer disappears into the fuselage (`qa-fly-seated.png`) — acceptable "closed cab", but a visible head/canopy would read better. Buggy is correct (rider visibly seated in the cab, `qa-drive-seated.png`).
-3. **Vostok props render near-white** (MS_Tent, MS_Crate, MS_Plank_Pile at camps/anchorage) — reads slightly untextured under fog + software-GL (`qa-anchorage-a.png`); expected to look right on device, but check once.
-4. **Bog lurkers are near-silhouette dark** in fog (`qa-mirewood-a.png`) — dramatic but borderline readability; a touch of rim/emissive or lighter albedo would help.
-5. **Reed Runner spawns in cell [9,6] with 2 aquatic pike_pirates** — boarding it is contested; if intentional (ambush), fine.
-6. **Title wraps "HERON WADE"** on two lines in portrait (`probe-title.png`) — cosmetic.
-7. Coordinator's `luma-night.png` is actually the sign-in gate, not a night frame — harmless (sky is pinned `{time: day, weather: fog}`, no night phase exists), but the artifact is mislabeled.
-8. Worst frame 233 ms (under the 250 ms bar) — acceptable; average-fps numbers are container artifacts, ignored.
-
----
-
-## ✅ What passed (with the evidence read)
-
-| Dimension | Result | Evidence |
+| Check | Result | Evidence |
 |---|---|---|
-| Boot / console | ✅ | verifier: engine booted, canvas, **console clean**; scene-instantiation 35/0 failed |
-| qgcheck winnability (graph) | ✅ | "quest-graph OK — world is winnable (576 areas)" (but see P0-1) |
-| Kill-count feasibility | ✅ | quests need 6/3/4/1 kills vs authored 10 rats / 6 lurkers / 8 pirates / 1 reaver |
-| Rules layer | ✅ | `start_amb` fired post-auth in **every** probe; `seen_*` region rules fire; coordinator's kill/bounty/hurt rules re-confirmed (rat chain) |
-| Movement + camera | ✅ | 5.5 m on W; drag-look 1.08 rad; camera collision works (no wall clipping) |
-| No autofire-on-look | ✅ | attack is a dedicated button; look-drag fired zero attack/kill rules (asserted); HP/bounty unchanged |
-| Combat: enemies engage + damage both ways | ✅ | rats: HP 46→10 between frames, surrounded player (`qa-camp-*.png`); lurkers: HP 16→44 (died + **in-place respawn, no modal death UI**); pirates converge (`qa-anchorage-*.png`); kill chain (attack→death→`bounty_rat`+`first_rat`) from coordinator's combat probe |
-| Enemy models / clips / no T-pose | ✅ | all 4 combat GLBs: idle/walk/attack/death + skeleton (headless check); rats/pirates/lurkers textured + animated + correct facing in-game; **0 GOGI_PLACEHOLDER** once CDN proxied (in-container placeholder lines are a chromium-TLS sandbox artifact — asset URLs all 200) |
-| Enemy stats sanity | ✅ | 70/6, 180/14, 110/9, 480/18 authored per cell; 55 % per-hit cap → min 2 hits on everything; talon 60 dmg → 8-hit boss |
-| Weapons catalog + chests | ✅ | 6 weapon defs match chest contents at [4,2],[3,-4],[-6,3],[12,2],[13,12] + `talon_gift` rule on `clear_the_waters`; start weapon = restatted `rusty_sword` → "Reed Torch" 18 dmg (renders in hand) |
-| Weapon-in-hand | ✅ | torch gripped (multiple shots); talon blade gripped at boss (`qa-boss-island.png`); bow/staff are parametric (not visually sampled — low risk) |
-| Vehicles board/travel/exit | ✅ | all 3 profiles via the real `try_use` path; buggy nose-first dot=1.0, upright; plane dot=0.99, airborne dy=2.6 (coordinator) ; boat rides water y=−0.23; DISMOUNT affordance appears |
-| World persistence / boundary | ✅ | walked into the west border cell: **invisible edge wall stops the player at x≈−127** (78 s of held W, x unchanged); world keeps rendering, engine alive (`qa-edge-offgrid.png`) — no world-vanish possible |
-| World richness / density | ✅ | land side: 360 cells, **avg ~41 entities/cell, 0 empty**; village byte-preserved (64 cells, only the disclosed [4,2] chest added — `check_preservation.py`); roads render on the causeway; camps have tents/campfires/crates; anchorage has props+structure+chest; boss delta has skull-totems/graves. Verifier SPARSE warn (~1.9/cell) is bay-dominated: 216 open-water cells at 0.9 — intentional boat space |
-| Art / style | ✅ | foggy muted swamp reads as authored: textured mud/sand/grass grounds up close, fog-graded horizon, no grey ceiling slab (fog-white sky is the weather), textured hero (bearded wanderer in ochre oilskin) + heron NPC models, feet on ground (`foot_raw` ≈ 0.05) |
-| Mobile fill / HUD | ✅ | portrait 720×1280 and 400×860 + landscape 860×400 all full-bleed, four corners, HUD inside, no overlaps; `GOGI_HUD_FIT` auto-moved bounty/explored to the bottom corners to avoid the stats stack |
-| Budgets | ✅ | pck 11 MB; GPU peak observed 82 MB video / 33 MB tex (of 220 budget) incl. camp/anchorage/boss areas; LIVE_ENEMY_BUDGET caps skinned enemies |
-| Native tier | ✅ | `manifest.json`: `webOnly: false`, world.json data-driven, requires rules+hud |
-| Audio presence | ✅ | AudioManager + bus layout + 20 tracks incl. new road/boat/tension; regions reference existing files; verifier audio pass silent (no warn) |
-| Meshy sourcing | ✅ | every character/creature/vehicle is Meshy (`models/meshy_assets.jsonl` prompts match shipped GLBs); kk_* items are props/rig-donors only; hero/NPC `/cloud-iybqouv5yf6dymalatmc/…` URLs are self-healed by `main.gd:_norm` onto the current build id (files present locally — works) |
-| Preservation | ✅ | original 64 village cells byte-identical except the disclosed chest |
-| Tofu / debug text | ✅ | none in any frame; apostrophes render |
+| verify.mjs full gate (mp-off byte-variant, local engine) | ✅ `=== VERIFY PASSED ===`, console clean, exit green | `/workspace/qa/logs/verifyG.log` (current bytes), `verifyA.log` (earlier rev) |
+| qgcheck winnability (campaign regression) | ✅ "world is winnable (576 areas)"; quests.json untouched (git-clean) | verifyG.log |
+| **Dragon kill chain at REAL ship stats (hp 700), melee, real `_attack()` path** | ✅ hp fell 700→dead in 39 hits × 18 dmg over ~40 s; `dragon_aggro` → `dragon_enrage` (0.5 crossing) → `bounty_dragon` (kill) all fired | `/workspace/qa/logs/native6.log` (QA_DIAG hp ladder 700/682/…/-2 + GOGI_RULE_FIRED lines) |
+| Dragon engages + damages the player | ✅ grounded chase closes to 1.6 m, player hp bar drops, `player_damaged`→`dragon_aggro` fires; feedback is the non-modal red flash + shake (no popup) | native6.log, `/workspace/qa/cur_t2.png`, `cur_t3.png` |
+| Hoard chest → Dragonfang + 200 gold → auto-equip | ✅ `QA_EQUIP wpn=dragonfang inv=[rusty_sword, …, dragonfang] gold=200` via real `try_use()`/chest path; "USE > Open Chest" prompt + "You opened the chest." in-browser | `/workspace/qa/logs/native3.log`, `/workspace/qa/kill_chest.png`, `kill_weapon.png` |
+| Ranged also damages/kills the dragon (weapon-curve sanity) | ✅ bow kill chain proven (hp 90 variant): qa_hit + enrage + bounty fired via projectile `take_hit` | `/workspace/qa/logs/native2.log` |
+| Dragon model (Meshy rig-lab) | ✅ 8.8k tris, webp textures, 15 clips (attack/bite/death/…/walk); three DISTINCT rendered poses (idle/flap/attack) — skeleton moves, no T-pose; on-style mossy swamp dragon | `/tmp/qa_render/dragon_{idle,flap,attack}.png`, meshy_assets.jsonl entry (match PASS) |
+| Dragon scale in-scene | ✅ authored 2.2 m tall → ~4.6 m long body + wide wingspan; reads boss-sized next to the 1.65 m hero, not comical, not frame-filling | `/workspace/qa/cur_t2.png`, `bow360_h5.png` |
+| Roost dressing + region rules | ✅ dirt lair w/ bones/skull/ribcage/dead trees/rocks renders; "The Dragon's Roost" region title, tension-music region entry, `seen_12` (+explored, max 13 ✓), `roost_warn` subtitle+shake, `roost_rumor` authored on Mirewood | `cur_t2.png`, GOGI_RULE_FIRED lines in every probe log |
+| Melee vs ground enemies (regression) | ✅ 3 rat bandits killed cleanly, 18 dmg/swing, 70→-2 each, through the same `_attack()` | `/workspace/qa/logs/native5.log` |
+| Mobile fill | ✅ portrait 400×860 and landscape 860×400 both fill all four corners, HUD inside viewport, no overlap, title screen fills too | `/workspace/qa/fill_portrait.png`, `fill_landscape.png` |
+| Day / night readability | ✅ deterministic gogiSetTime capture: day mean 145.9 (0% clipped), night mean 38.1 — night stays readable, day doesn't blow out | verifyG.log luma lines, `/workspace/verify/luma-{day,night}.png` |
+| Boot + console | ✅ engine boots, canvas present, "console clean (no real JS/GDScript errors)"; zero SCRIPT ERROR / rules-UNIMPL lines across ~10 gameplay sessions | verifyG.log + all probe logs (`ERRS: none`) |
+| Native tier | ✅ chunk-mode world.json; manifest `webOnly:false`, requires rules+hud | `/workspace/repo/out/manifest.json` |
+| Character sourcing (Meshy mandate) | ✅ hero/NPCs/enemies/dragon all Meshy GLBs (`models/meshy/*`); mire_dragon staged locally AND live on the CDN (200, 2,492,644 bytes) | manifest + curl check |
+| Audio | ✅ AudioManager + bus layout present; `thunder` used by dragon rules is a registered SFX; region music `tension.ogg` shipped | verifyG.log "audio infra present", `out/audio/` |
+| World persistence / containment | ✅ terrain border walls + always-on `_clamp_to_world`; feel streaming probe walked cells with no fall-through; cross-map teleport rebuilt cells and enemies correctly | verifyG.log, native5.log |
 
-## Could not verify (sandbox limits)
-- Real-device GPU fidelity (vostok prop whiteness, lurker darkness — flagged above as polish), audio playback, touch feel.
-- Browser↔Supabase realtime (in-container chromium cannot TLS to supabase/CDN at all — even plain fetches fail; the transport was proven from node by the coordinator's 2-client test, and auth works through the local proxy in all 12 of my probes). True 2-client sync, host-election and cross-area cull are untestable here.
-- Full quest-chain playthrough (talk/collect/reach steps of quests 1–3) — machinery is engine-standard and rules fire, but no end-to-end run was driven; the boss re-verify after the P0 fix should walk the chain's final step anyway.
+## 2. The P1 — resolved mid-session by your grounding change, but VERIFY MY CLAIM & finish the loose ends
+
+**The DELEGATED (aerial) dragon was melee-unwinnable and half the time never attacked.** Proof
+gathered before your 03:39 edit:
+- Native instrumented runs: the flyer's keep-away hard-clamped horizontal distance to a constant
+  **3.89 m / 5.52 m / 8.58 m** (per-spawn `_air_keep` draw ∈ [0.75,1.7] × surround 5.1) — always
+  above the 2.4 m melee reach; swoops dip only VERTICALLY (`enemy.gd` swoop lerps y, horizontal
+  target stays the keep-distance slot). hp stayed 90 under continuous real-path attacks
+  (`/workspace/qa/logs/native4.log` hdist=8.58 forever, no aggro — the >6 m draw also never attacks).
+- Browser sessions: ~360 ATTACK swings across 2 engaged sessions + a 360°×24-arrow bow sweep — zero
+  `enemy_hp_crossed` events (`melee.log`, `bow360.log`).
+- The engine comment says the swoop exists so the flyer is "reachable mid-dive instead of parked
+  untouchably overhead" — the keep-away contradicts it. **Latent engine bug class for ANY future
+  aerial melee-range enemy** (enemy.gd keep-away vs melee reach); this game no longer ships an aerial
+  enemy, so it's not a blocker here, but worth an engine note.
+
+**Loose ends from the grounding change (do these):**
+1. **Stale docs**: PLAN.md still says "dragon flies (aerial + hover, swoops to attack)" and the
+   README/delegation describe an aerial boss. The shipped dragon WALKS. Align the docs (or restore
+   flight only if the engine keep-away/melee interaction is actually fixed).
+2. `enemy_range` was dropped (now default 2.0) — verified fine (it lands hits), just noting the
+   delta from the described design (6.0).
+
+## 3. Polish / P2 notes (non-blocking)
+
+- **Hoard chest is lootable while the dragon is alive** — I opened it mid-fight and took
+  Dragonfang + 200 gold with the boss at full hp (`native3.log`: chest opened, aggro fired after).
+  The bounty toast says "Its hoard is unguarded" implying kill-gating. Consider `"lock"`-ing the
+  chest or gating on the kill flag if guarding is intended.
+- **Missing collider**: verify feel probe ended INSIDE a solid AABB near [-24.3, 30.7] (wilderness
+  cell (-2,1)/(-2,2) scatter — a tree/log/stump visual without a matching collider). Reproduced in
+  both verify runs. world-streaming SOLID-BY-DEFAULT says fix it.
+- **Fresh-cell hitch**: worst frame 483–500 ms while walking into new cells (both verify runs).
+  Real device stall (not container noise) — find the synchronous work in the cell build and slice it.
+- **SPARSE lint** (~1.9 weighted content/cell) + flat-tint lint: pre-existing, not this session's
+  delta; visuals judged acceptable for a fog-bog wilderness (village/camps read authored; characters
+  are demonstrably textured in every screenshot). No action demanded.
+- **Branch bookkeeping**: delegation said branch `feat/mire-dragon`; the repo is on `main` with the
+  whole delta UNCOMMITTED (and you were editing world.json during QA). Commit before anything else
+  touches the tree.
+
+## 4. Could not verify (sandbox limits)
+
+- Real multiplayer/auth (supabase TLS unreachable from container Chromium) — per the known
+  constraint, all gameplay probes used byte-identical `multiplayer.enabled=false` variants + local
+  engine-html patch; the canonical export's only verify FAIL remains the auth-gate "RULE LAYER NEVER
+  RAN" artifact. Second-device sync, host election, and the live wss path are untested here.
+- Real-GPU fidelity, audio playback, touch feel.
+
+## 5. Method note
+
+All variants/instrumentation lived in **my own copies** (`/workspace/qa/out*`, `/tmp/qa_proj`);
+`/workspace/repo` and `/workspace/repo/out` are untouched (git status shows only your session delta).
+Evidence: screenshots in `/workspace/qa/*.png`, `/tmp/qa_render/dragon_*.png`; logs in
+`/workspace/qa/logs/`.

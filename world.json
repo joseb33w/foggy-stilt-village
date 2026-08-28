@@ -2493,11 +2493,9 @@
    "enemies": 1,
    "enemy_type": "mire_dragon",
    "enemy_hp": 700,
-   "enemy_damage": 24,
+   "enemy_damage": 20,
    "enemy_speed": 1.1,
-   "enemy_height": 4.5,
-   "enemy_aerial": true,
-   "enemy_hover": 5.0,
+   "enemy_height": 2.2,
    "enemy_model": "/cloud-hdro8hilebm5ifgmt2hy/models/meshy/mire_dragon.glb",
    "chest": {
     "pos": [
@@ -21775,10 +21773,12 @@
   {
    "id": "dragon_aggro",
    "when": {
-    "event": "enemy_detected_player",
-    "target": "mire_dragon"
+    "event": "player_damaged"
    },
    "then": [
+    {
+     "sound": "thunder"
+    },
     {
      "subtitle": "The Mire Dragon drops from the fog, wings hammering the reeds!"
     },
@@ -21786,7 +21786,10 @@
      "shake": 0.45
     }
    ],
-   "once": true
+   "once": true,
+   "if": {
+    "in_region": "The Dragon's Roost"
+   }
   },
   {
    "id": "dragon_enrage",
@@ -21796,6 +21799,9 @@
     "at": 0.5
    },
    "then": [
+    {
+     "sound": "thunder"
+    },
     {
      "subtitle": "The dragon shrieks - its torn wings beat harder!"
     },
@@ -21820,7 +21826,7 @@
      "grant_xp": 300
     },
     {
-     "toast": "The Mire Dragon crashes into the bog. Its hoard is unguarded."
+     "toast": "The Mire Dragon crashes into the bog. The roost falls silent."
     }
    ],
    "once": true
