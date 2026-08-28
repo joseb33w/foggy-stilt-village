@@ -404,6 +404,18 @@ func reset_run() -> void:
 	fire("start", {"id": mode})     # re-run the opening rules (respawns a boss, re-arms timers)
 
 
+## Play a one-shot emote on the local hero and tell the room about it. Called by the `emote`
+## rule action. The clip name is any clip on the rig OR a semantic key hero_anim.resolve()
+## understands, so a thin rig degrades instead of freezing.
+func play_emote(clip: String, hold := 1.2) -> void:
+	if main == null:
+		return
+	if main.has_method("play_emote_local"):
+		main.play_emote_local(clip, hold)
+	if main.netsync != null and main.netsync.has_method("send_emote"):
+		main.netsync.send_emote(clip, hold)
+
+
 func _shake_cam(t: float) -> void:
 	_shake = maxf(_shake, t)
 

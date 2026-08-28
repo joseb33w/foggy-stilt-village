@@ -360,6 +360,16 @@ func _do(a: Dictionary, payload: Dictionary) -> void:
 		var hi := float(a.get("max", cs.get("max", 1e12)))
 		_vset(cn, clampf(_num(_vget(cn)), lo, hi)); return
 
+	# --- character ---
+	if a.has("emote"):
+		# One-shot emote/action clip on the hero (dance, wave, cheer, sit, taunt, …). The rig has
+		# carried this capability since the action hook existed, but NOTHING called it — the hook
+		# had zero callers anywhere in the template, so the animations were unreachable from data.
+		# This is that trigger. It also broadcasts, so other players see the emote.
+		if shell != null and shell.has_method("play_emote"):
+			shell.play_emote(String(a["emote"]), float(a.get("hold", 1.2)))
+		return
+
 	# --- ui ---
 	if a.has("toast"):
 		if shell != null:

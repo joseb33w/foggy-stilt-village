@@ -136,10 +136,12 @@ var _jump_queued := false           # a JUMP press (Space / HUD button) waiting 
 var _ground_stuck := false          # last frame the player was pinned to the analytic terrain (no collider yet) — counts as grounded for jump/gravity
 var _foot_raw := 0.0                 # DEBUG: render-pose lowest-foot height above the body origin (measured at skeleton_updated)
 var _weapon_btn: Button = null     # HUD draw/holster toggle (updates its own DRAW/SHEATHE label)
-var _hero_ap: AnimationPlayer = null   # the hero avatar's AnimationPlayer (retargeted OR embedded clips)
-var _hero_anim := ""                    # current semantic anim kind (idle/walk/run/attack)
-var _hero_air_t := 0.0                  # seconds continuously off the floor — coyote buffer so brief bumps/curbs don't flip to the fall (dive) clip
-var _hero_attack_t := 0.0               # remaining melee-attack-clip hold (s)
+## The hero's animation state machine. ONE INSTANCE PER ANIMATED CHARACTER — this is the
+## local player's; netsync holds one per remote peer. These were four globals on main, which
+## is precisely why only one character in the scene could ever animate and every peer in a
+## multiplayer room slid around frozen in its rest pose.
+const GHeroAnim = preload("res://hero_anim.gd")
+var _hero_anim_state := GHeroAnim.new()
 var _hero_avatar: Node3D = null         # the attached hero GLB — hidden when the camera collapses onto it
 
 var rpg: RpgState
@@ -196,6 +198,16 @@ var _hud_btns: Dictionary = {}   # name -> Button, repositioned by _relayout_ui 
 # would otherwise put back a control the game deliberately took away.
 var _hud_hidden: Dictionary = {}
 var hud_debug := false           # ?hudgrid=1 / --hudgrid — overlay the live HUD geometry on screen
+## ?capture=1 / --capture — hide the HUD so a recorded preview shows the GAME, not its controls.
+##
+## A feed card is a few seconds of gameplay filling a phone screen, and JUMP / USE / CHECKPOINTS /
+## the minimap in every frame make it read as a screenshot of a UI rather than a world. The controls
+## are the one part of the picture a viewer who has not tapped yet cannot use.
+##
+## Recording ONLY. It is never set during real play, and the automated recorder drives the hero with
+## the keyboard (or a raw left-half touch, which is not a HUD button) — so nothing it needs to do
+## depends on the controls being drawn.
+var capture_mode := false
 var _hud_dbg_lbl: Label = null
 ## ?mpdebug=1 / --mpdebug — peer sync health on screen. Exists because the whole netsync rewrite is
 ## INVISIBLE on a phone: a correctly-interpolated peer and one being held by a starved buffer look
@@ -238,18 +250,17 @@ func _ready() -> void:
 		var bid = JavaScriptBridge.eval("(function(){var s=location.pathname.split('/').filter(Boolean)[0]||'';return /^(news-)?cloud-/.test(s)?s:'';})()", true)
 		if typeof(bid) == TYPE_STRING and String(bid) != "":
 			build_id = String(bid)
-		var soak = JavaScriptBridge.eval("window.location.search.indexOf('soak=1')>=0", true)
-		if typeof(soak) == TYPE_BOOL and soak:
-			auto_roam = true
 		# `hud_debug` was declared and READ and never once assigned — the ?hudgrid=1 overlay could
 		# not be switched on by any means. A diagnostic that cannot be enabled is worse than none:
 		# it reads as available in the source and silently is not.
-		var hg = JavaScriptBridge.eval("window.location.search.indexOf('hudgrid=1')>=0", true)
-		if typeof(hg) == TYPE_BOOL and hg:
+		if _query_flag("soak"):
+			auto_roam = true
+		if _query_flag("hudgrid"):
 			hud_debug = true
-		var mpd = JavaScriptBridge.eval("window.location.search.indexOf('mpdebug=1')>=0", true)
-		if typeof(mpd) == TYPE_BOOL and mpd:
+		if _query_flag("mpdebug"):
 			mp_debug = true
+		if _query_flag("capture"):
+			capture_mode = true
 	elif _pending_world_url == "":
 		# Launch value. Skipped entirely on a runtime swap, or the command line would be adopted first
 		# and then immediately overwritten — harmless but it logs two different worlds per reload,
@@ -781,7 +792,7 @@ func _enter_swim() -> void:
 	# engages swim on the first physics frame, and freezing a rig that has never been posed captures
 	# its rest pose — a T-pose. (GPose._freeze_anim also forces the pose to apply; this covers the
 	# other half, where no clip had been requested at all.)
-	_play_hero("idle")
+	_hero_anim_state.play("idle")
 	GPose.swim(player)                       # self-guards: a capsule (unrigged) player is a no-op
 
 
@@ -937,7 +948,17 @@ func _process(delta: float) -> void:
 	# orientation GEquip gave them (no -10° idle stomp on a bow).
 	swing_t = maxf(0.0, swing_t - delta)
 	_fire_cd = maxf(0.0, _fire_cd - delta)
-	_update_hero_anim(delta)   # idle/walk/run/attack state machine (on foot; riders are GPose-posed)
+	# idle/walk/run/attack state machine (on foot; riders are GPose-posed). Motion is passed as
+	# DATA so the SAME machine drives a network peer off an interpolated transform (netsync) —
+	# see hero_anim.gd. Guard mirrors the old in-function one: no body, no motion, no update.
+	if player != null and is_instance_valid(player):
+		_hero_anim_state.update(delta, {
+			"speed": Vector2(player.velocity.x, player.velocity.z).length(),
+			"vy": player.velocity.y,
+			"on_floor": player.is_on_floor(),
+			"swimming": swimming,
+			"mounted": active_vehicle != null and is_instance_valid(active_vehicle),
+		})
 	_fade_near_camera_enemies()   # #6: hide any enemy pressed against the camera lens so it can't "pop up"
 	# Mobile-OOM telemetry: the QA gate (verify.mjs) reads the PEAK GOGI_VRAM_MB over the world-start
 	# window to fail-close a build that would blow a phone's GPU budget. RENDER_TEXTURE_MEM_USED is the
@@ -1065,8 +1086,8 @@ func _attack() -> void:
 	if swing_t > 0.0:
 		return
 	swing_t = 0.22
-	_hero_attack_t = 0.45   # play the melee swing body animation
-	_play_hero("attack")
+	_hero_anim_state.attack_t = 0.45   # play the melee swing body animation
+	_hero_anim_state.play("attack")
 	AudioManager.play_sfx("attack")
 	var dmg := rpg.weapon_damage()
 	var fwd := player.global_transform.basis.z   # forward=+Z (look_at(pos-dir) faces +Z); -basis.z hit BEHIND (inverted cone)
@@ -2044,6 +2065,12 @@ func _input(event: InputEvent) -> void:
 func _touch_on_hud(p: Vector2) -> bool:
 	if hud_layer == null:
 		return false
+	# Nothing is drawn in capture mode, so nothing may claim a touch. Checking the layer rather than
+	# each button because `b.visible` is the node's OWN flag — it stays true when an ancestor
+	# CanvasLayer is hidden, and an invisible button that still swallows input would silently break
+	# the recorder's movement drive.
+	if capture_mode:
+		return false
 	for k in _hud_btns:
 		var b: Button = _hud_btns[k]
 		if b != null and is_instance_valid(b) and b.visible and Rect2(b.position, b.size).has_point(p):
@@ -2497,9 +2524,9 @@ func _on_gogi_get_player(_args: Array) -> String:
 		"swimming": swimming,
 		"on_floor": player.is_on_floor(),   # verify.mjs floating-avatar gate: grounded unless swim/climb/vehicle
 		"vy": player.velocity.y,             # DEBUG run-float: vertical speed (grounded run should be ~0)
-		"anim": _hero_anim,                  # DEBUG run-float: semantic anim (run/walk/idle/jump)
-		"clip": (_hero_ap.current_animation if _hero_ap != null and is_instance_valid(_hero_ap) else ""),
-		"air_t": _hero_air_t,
+		"anim": _hero_anim_state.anim,       # DEBUG run-float: semantic anim (run/walk/idle/jump)
+		"clip": (_hero_anim_state.ap.current_animation if _hero_anim_state.ap != null and is_instance_valid(_hero_anim_state.ap) else ""),
+		"air_t": _hero_anim_state.air_t,
 		"wall": player.is_on_wall(),         # DEBUG run-float
 		"fps": Engine.get_frames_per_second(),   # DEBUG run-float: low fps in headless = physics artifact
 	}
@@ -2602,6 +2629,28 @@ func _body_world_aabb(body: StaticBody3D) -> AABB:
 # file. That is not a crash and logs nothing: the fetch 404s, no regions are ever built, and a
 # completely healthy engine renders a black screen. Web behaviour is untouched — this runs only on
 # the non-web branch.
+## Is `?<name>=1` present in the page URL? Web only; false everywhere else.
+##
+## Written this way because JavaScriptBridge.eval does NOT hand a JS boolean back as a Godot bool —
+## on 4.7.1 `x >= 0` arrives as TYPE_INT 1. Every `typeof(v) == TYPE_BOOL` guard therefore evaluated
+## false no matter what the URL said, which is why ?soak=1, ?hudgrid=1 and ?mpdebug=1 were all dead
+## on web. (_setup_web_time_hooks already worked around it locally with `?1:0`.) Reading the answer
+## loosely, rather than trusting one marshalled type, is what keeps the next flag from dying the
+## same silent death.
+func _query_flag(name: String) -> bool:
+	if not OS.has_feature("web"):
+		return false
+	var v = JavaScriptBridge.eval("window.location.search.indexOf('%s=1')>=0?1:0" % name, true)
+	match typeof(v):
+		TYPE_BOOL:
+			return bool(v)
+		TYPE_INT, TYPE_FLOAT:
+			return float(v) != 0.0
+		TYPE_STRING:
+			return String(v) == "1" or String(v) == "true"
+	return false
+
+
 func _apply_cmdline_world() -> void:
 	# Read both lists so either calling convention works: args after a `--` separator (the documented
 	# way to pass custom arguments, and the only way that cannot collide with an engine flag) and the
@@ -2622,6 +2671,8 @@ func _apply_cmdline_world() -> void:
 			hud_debug = true
 		elif a == "--mpdebug":
 			mp_debug = true
+		elif a == "--capture":
+			capture_mode = true
 		elif a.begins_with("--mode="):
 			# Test hook: pick a title-screen mode without a click, so a headless run can exercise a
 			# specific mode — including a MAP mode, whose whole point is which room you land in.
@@ -3173,7 +3224,11 @@ func _start_multiplayer(map_id: String) -> void:
 		netsync.peer_shot.connect(_on_peer_shot)
 	netsync._peer_layer = L_PEER
 	netsync.hp_probe = func() -> float: return rpg.hp if rpg != null else 1.0
-	netsync.configure(world_data, player, Callable(self, "_make_remote_avatar"))
+	netsync.configure(world_data, player, Callable(self, "_make_remote_avatar"), {
+		"state": Callable(self, "_net_avatar_state"),
+		"equip": Callable(self, "_peer_equip"),
+		"vehicle": Callable(self, "_peer_vehicle"),
+	})
 
 
 # A hit claim from another player SURVIVED their validation, so it is real as far as we are concerned.
@@ -3256,6 +3311,67 @@ func _cmdline_room() -> String:
 
 # A remote body: the same character the local player wears, so peers look like players rather than
 # like debug capsules. Returns null when the world names no hero model — netsync falls back.
+## Play a one-shot emote clip on the LOCAL hero. The rule layer reaches this through
+## GameShell.play_emote, which also broadcasts it so every other screen plays the same clip.
+func play_emote_local(clip: String, hold := 1.2) -> void:
+	_hero_anim_state.action(clip, hold)
+
+
+## What THIS client broadcasts about its own avatar, merged into the 10Hz position packet by
+## netsync. Keep it small and keep it DERIVED — it is read 10x/s, so nothing here may allocate
+## or await. Defaults (unarmed, unstowed, dry) are dropped on the wire by the sender.
+func _net_avatar_state() -> Dictionary:
+	return {
+		"w": String(rpg.equipped_weapon) if rpg != null else "",
+		"stw": _weapon_stowed,
+		"sw": swimming,
+		# Which ride we are on, as its index in world.json's "vehicles" — the one identifier every
+		# client already agrees on, because they all built that array from the same file in order.
+		"mv": vehicles.find(active_vehicle) if (active_vehicle != null and is_instance_valid(active_vehicle)) else -1,
+	}
+
+
+## Resolve a world vehicle by the index a peer broadcast. netsync holds no world state, so it
+## asks; -1 and out-of-range both mean "no ride", which is what a stale index during a hot-reload
+## looks like.
+func _peer_vehicle(index: int):
+	if index < 0 or index >= vehicles.size():
+		return null
+	var v = vehicles[index]
+	return v if (v != null and is_instance_valid(v)) else null
+
+
+## Put a weapon in a PEER's hand. The mirror of _sync_equip_visual, and deliberately the same
+## resolve -> prefetch -> GEquip.equip shape: GEquip works on ANY character, and a peer wears the
+## same hero_model as the local player, so the hand bone it resolves is the same one. netsync
+## calls this through a hook because it must not learn what a weapon def or a builder cache is.
+func _peer_equip(avatar: Node3D, id: String, stowed: bool) -> void:
+	if avatar == null or not is_instance_valid(avatar):
+		return
+	if id == "":
+		GEquip.unequip(avatar)
+		return
+	var def: Dictionary = rpg.weapon_def(id) if rpg != null else {}
+	if def.is_empty():
+		return
+	var model: Node3D = null
+	var mu := String(def.get("model", ""))
+	if mu != "" and not mu.begins_with("parametric:"):
+		var u := _norm(mu)
+		if u != "":
+			await builder._ensure([u])
+			if builder.cache.has(u) and builder.cache[u] != null:
+				model = (builder.cache[u] as Node).duplicate() as Node3D
+	# The fetch above is multi-frame, and interest culling frees peer avatars mid-flight. Without
+	# this the equip lands on a freed node — the classic await-then-touch-a-dead-object crash.
+	if not is_instance_valid(avatar):
+		return
+	GEquip.equip(avatar, def, model)
+	var slot := avatar.find_child("GEquipSlot", true, false) as Node3D
+	if slot != null:
+		slot.visible = not stowed
+
+
 func _make_remote_avatar() -> Node3D:
 	var hero := String(world_data.get("hero_model", ""))
 	if hero == "":
@@ -3326,7 +3442,13 @@ func _attach_hero_model() -> void:
 	_seat_avatar(node)                           # skeleton-aware: feet (not dangling cloth) to y=0
 	if _capsule_body != null and is_instance_valid(_capsule_body):
 		_capsule_body.visible = false            # the placeholder body gives way to the avatar
-	_play_hero_idle(node)
+	_hero_anim_state.attach(node)
+	# The avatar streams in from R2, so it can attach LONG after the player entered the water. GPose.swim
+	# was a silent no-op back then (the capsule has no skeleton), and nothing would ever retry — the
+	# swimmer would run their walk cycle while floating. Apply it now that there is a rig to pose. Stays
+	# HERE rather than in the module: a peer has no CharacterBody3D to pose.
+	if swimming:
+		GPose.swim(player)
 	# Ground the feet AFTER the skeleton pose is computed each frame (skeleton_updated fires post-anim,
 	# pre-render) — running it in _process grounded the PREVIOUS frame's pose while the render showed the
 	# current one, leaving a residual float. This hook reads/corrects the exact pose that gets drawn.
@@ -3383,143 +3505,20 @@ func _fetch_glb_scene(url: String) -> Node3D:
 	return scene
 
 
-# Autoplay the hero's idle so it isn't a frozen A-pose. A model that EMBEDS clips (Meshy/library
-# creature) plays its own; a clipless KayKit Rig_Medium retargets from the packed kk_rig_medium_*
-# libraries via AnimRig (the enemy.gd / crowd idiom). Silent no-op when neither yields a clip.
-func _play_hero_idle(node: Node3D) -> void:
-	var ap := AnimRig._find_ap(node)
-	if ap == null or ap.get_animation_list().is_empty():
-		# retarget a FULLER clip set so the hero idles / walks / runs / attacks instead of freezing
-		# on a single idle pose. Aliases whose source clip is missing are simply skipped by AnimRig,
-		# and _play_hero degrades run->walk->idle, so a thinner library still animates.
-		ap = AnimRig.attach(node, {
-			"idle": "Idle_A", "walk": "Walking_A", "run": "Running_A",
-			"attack": "Melee_1H_Attack_Chop",
-			"jump": "Jump_Full_Short", "fall": "Jump_Idle",
-		}, ["idle", "walk", "run", "fall"])
-	if ap == null or ap.get_animation_list().is_empty():
-		return
-	_hero_ap = ap
-	_hero_anim = ""
-	_hero_attack_t = 0.0
-	_play_hero("idle")
-	# The avatar streams in from R2, so it can attach LONG after the player entered the water. GPose.swim
-	# was a silent no-op back then (the capsule has no skeleton), and nothing would ever retry — the
-	# swimmer would run their walk cycle while floating. Apply it now that there is a rig to pose.
-	if swimming:
-		GPose.swim(player)
-
-
-# Resolve a semantic anim kind (idle/walk/run/attack) to a real clip on the hero's AnimationPlayer —
-# works for BOTH the retargeted alias set (exact name) and a model that embeds its OWN clips
-# (substring match), so library AND Meshy creature avatars animate. "" = no such clip.
-func _resolve_hero_clip(kind: String) -> String:
-	if _hero_ap == null or not is_instance_valid(_hero_ap):
-		return ""
-	if _hero_ap.has_animation(kind):
-		return kind
-	var keys: Array = {
-		"idle": ["idle"], "walk": ["walk"],
-		"run": ["run", "sprint", "jog"],
-		"jump": ["jump", "leap"],
-		"fall": ["fall", "jump_idle", "air"],
-		"attack": ["attack", "melee", "chop", "slash", "punch", "strike"],
-		"swim": ["swim", "tread", "paddle", "float"],
-	}.get(kind, [kind])
-	for c in _hero_ap.get_animation_list():
-		var cl := String(c).to_lower()
-		for k in keys:
-			if k in cl:
-				return String(c)
-	return ""
-
-
-# Switch the hero to a semantic anim with a short crossfade. Falls back run->walk->idle so a rig
-# missing a clip animates instead of snapping to a frozen pose.
-func _play_hero(kind: String) -> void:
-	if _hero_ap == null or not is_instance_valid(_hero_ap) or kind == _hero_anim:
-		return
-	var clip := _resolve_hero_clip(kind)
-	if clip == "" and kind == "run":
-		clip = _resolve_hero_clip("walk")
-	if clip == "" and kind != "idle":
-		clip = _resolve_hero_clip("idle")
-	if clip == "":
-		return
-	# Embedded GLB locomotion clips import with loop_mode = NONE — walk/run then play ONE cycle and FREEZE
-	# on the last frame while the body keeps moving, so the hero slid forward stuck in a single pose
-	# ("floating, legs not moving, frozen"). The retargeted KayKit set gets looped at attach, but a Meshy
-	# avatar's OWN clips don't. Force the cyclic clips to loop here; jump/attack/death stay one-shot.
-	if kind == "idle" or kind == "walk" or kind == "run" or kind == "swim":
-		var loop_anim := _hero_ap.get_animation(clip)
-		if loop_anim != null and loop_anim.loop_mode == Animation.LOOP_NONE:
-			loop_anim.loop_mode = Animation.LOOP_LINEAR
-	_hero_anim = kind
-	_hero_ap.play(clip, 0.15)
-
-
-# Per-frame hero animation state machine (on foot only — a seated/mounted rider is posed by GPose).
-# The attack clip plays out its window uninterrupted; otherwise moving -> run (walk fallback),
-# still -> idle.
-func _update_hero_anim(delta: float) -> void:
-	if _hero_ap == null or not is_instance_valid(_hero_ap):
-		return
-	if active_vehicle != null and is_instance_valid(active_vehicle):
-		return
-	# SWIM: while floating in deep water, stroke a swim clip (or, on a rig without one, hold the GPose.swim
-	# tread pose) instead of the run cycle re-stamping over it every frame ("walking on water").
-	if swimming:
-		var sc := _resolve_hero_clip("swim")
-		if sc != "" and _hero_anim != "swim":
-			_play_hero("swim")
-		return
-	_hero_attack_t = maxf(0.0, _hero_attack_t - delta)
-	if _hero_attack_t > 0.0:
-		return   # let the swing clip / a one-shot action finish before locomotion resumes
-	# COYOTE BUFFER: a hero running over city curbs / uneven ground loses floor contact for a frame or
-	# two, which flipped the "fall" clip (a floating dive pose) on/off every few frames — reading as the
-	# character FLOATING / diving while it ran. Only switch to jump/fall once genuinely airborne (>0.14s
-	# off the floor, or clearly launched upward), so a bump keeps the run/walk clip and stays upright.
-	if player != null and is_instance_valid(player):
-		# Airborne pose ONLY when actually off the floor. The old code also fired on `velocity.y > 2.0`
-		# while GROUNDED — running over city curbs / floor-snap pops spikes vy, so the hero kept flicking
-		# into the jump-leap clip (this model's `jump` lifts the hips to y≈254, a ~1.5 m pop) and the
-		# `fall` path falls back to idle (an idle pose mid-air). Both READ AS FLOATING while running.
-		# Grounded (even bumpy) now always plays locomotion; off-floor & rising -> the jump leap; off-floor
-		# & descending -> fall through to run/walk (the model has NO fall clip, and idle-in-air floats too).
-		_hero_air_t = 0.0 if player.is_on_floor() else _hero_air_t + delta
-		if _hero_air_t > 0.12 and player.velocity.y > 0.5:
-			_play_hero("jump")
-			return
-	var spd := Vector2(player.velocity.x, player.velocity.z).length()
-	if spd > 3.0:
-		_play_hero("run")
-	elif spd > 0.3:
-		_play_hero("walk")
-	else:
-		_play_hero("idle")
-
-
-# Play a one-shot ACTION / emote clip on the hero (dance, wave, cheer, sit, taunt, …) then auto-return
-# to locomotion after `hold` seconds. `clip` is any clip NAME on the rig OR a semantic key
-# _resolve_hero_clip understands. This is the hook that lets the game give the character ALL types of
-# animations beyond the built-in idle/walk/run/jump/attack set — call it on any event.
-func _play_hero_action(clip: String, hold := 1.2) -> void:
-	if _hero_ap == null or not is_instance_valid(_hero_ap):
-		return
-	var resolved := _resolve_hero_clip(clip)
-	if resolved == "" and _hero_ap.has_animation(clip):
-		resolved = clip
-	if resolved == "":
-		return
-	_hero_attack_t = hold   # reuse the "don't override locomotion" gate for the action's duration
-	_hero_anim = "action"
-	_hero_ap.play(resolved, 0.15)
 
 
 func _build_hud() -> void:
 	hud_layer = CanvasLayer.new()
 	add_child(hud_layer)
+	# Hidden at the LAYER, so everything drawn into it goes at once — the stats block, health bar,
+	# minimap, action buttons, and the controls building.gd and rules.gd add later. Hiding each
+	# owner separately would mean a new one silently reappearing in recordings.
+	hud_layer.visible = not capture_mode
+	if capture_mode:
+		# Printed so a recording can be PROVEN to have run clean. Without it, "the HUD is hidden" is
+		# only checkable by eye on the finished clip, which is exactly the kind of thing that
+		# silently regresses.
+		print("GOGI_CAPTURE hud hidden")
 	stats = Label.new()
 	stats.position = Vector2(12, 12)
 	stats.add_theme_font_size_override("font_size", 22)

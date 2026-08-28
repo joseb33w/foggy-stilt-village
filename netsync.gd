@@ -24,6 +24,12 @@ extends Node
 ## injects, the anon key is publishable and RLS-scoped, and keeping it out of the template means
 ## no credential ships in the engine, the repo, or the R2 template zip.
 
+## The per-avatar animation state machine — the same one main.gd runs for the local hero.
+const GHeroAnim = preload("res://hero_anim.gd")
+## Vertical speed (m/s) above which a peer is treated as off the floor. Deliberately the same
+## number as hero_anim's own jump test, so "airborne" and "rising enough to leap" agree.
+const PEER_AIR_VY := 0.5
+
 ## 10Hz is plenty for walking characters and keeps the channel far under Supabase's message rate.
 ## Peer lifecycle, surfaced so the RULE LAYER can react to it ("wait for 2 players", "announce the
 ## shared score to a late joiner"). netsync owns peer bookkeeping; it should not also decide what a
@@ -147,6 +153,15 @@ var player: Node3D = null
 ## Provided by main: an async Callable returning a Node3D to use as a remote body, so this file
 ## never needs to know how models are fetched, normalized or seated.
 var avatar_factory: Callable = Callable()
+## OPTIONAL HOOKS from the game shell, same idea as avatar_factory: netsync owns the wire and
+## the bodies, main owns the weapon catalog, the model cache and the player's own state. Kept
+## as callables so this file never learns what a weapon def or a builder cache is.
+##   "state" -> func() -> Dictionary   the LOCAL avatar state to broadcast {w, stw, sw}
+##   "equip" -> func(avatar, id, stowed) -> void   put weapon `id` on a PEER's avatar
+var _hook_state: Callable = Callable()
+var _hook_equip: Callable = Callable()
+##   "vehicle" -> func(index) -> Vehicle   resolve a world vehicle by its world.json order
+var _hook_vehicle: Callable = Callable()
 
 var enabled := false
 var room := ""
@@ -185,9 +200,12 @@ var _hits_rejected := 0
 var _last_hit_by := ""
 
 
-func configure(world: Dictionary, p: Node3D, factory: Callable) -> void:
+func configure(world: Dictionary, p: Node3D, factory: Callable, hooks := {}) -> void:
 	player = p
 	avatar_factory = factory
+	_hook_state = hooks.get("state", Callable())
+	_hook_equip = hooks.get("equip", Callable())
+	_hook_vehicle = hooks.get("vehicle", Callable())
 	var raw: Variant = world.get("multiplayer", null)
 	var mp: Dictionary = raw if raw is Dictionary else {}
 	enabled = bool(mp.get("enabled", false))
@@ -411,7 +429,8 @@ func _process(delta: float) -> void:
 		if age > DESPAWN_S:
 			var dead: Node = rec.get("node")
 			if dead != null and is_instance_valid(dead):
-				dead.queue_free()
+				_release_peer_mount(rec)
+			dead.queue_free()
 			_peers.erase(id)
 			print("GOGI_MP_PEER leave ", id, " peers=", _peers.size())
 			peer_left.emit(id)
@@ -422,6 +441,7 @@ func _process(delta: float) -> void:
 		# _on_pos, so the two edges never coincide and a peer at the boundary cannot oscillate.
 		if node != null and is_instance_valid(node) \
 			and not _within_interest(rec.get("pos", Vector3.ZERO), PEER_VISIBLE_SLACK):
+			_release_peer_mount(rec)
 			node.queue_free()
 			rec["node"] = null
 			node = null
@@ -430,7 +450,9 @@ func _process(delta: float) -> void:
 			continue
 		if age > STALE_S:
 			continue   # they stopped talking — leave the body where it is rather than drifting it
-		_render_peer(rec, node, now)
+		_sync_peer_equip(rec, node)
+		_sync_peer_mount(rec, node)
+		_render_peer(rec, node, now, delta)
 
 
 ## Place a peer at `now - INTERP_DELAY` from the two snapshots that BRACKET that instant.
@@ -438,7 +460,7 @@ func _process(delta: float) -> void:
 ## A starved buffer HOLDS the newest sample and never extrapolates. Guessing forward looks smoother
 ## for one frame and then rubber-bands the body backwards the moment a real packet disagrees, which
 ## reads as a worse connection than simply pausing does.
-func _render_peer(rec: Dictionary, node: Node3D, now: float) -> void:
+func _render_peer(rec: Dictionary, node: Node3D, now: float, delta: float) -> void:
 	var buf: Array = rec.get("buf", [])
 	if buf.is_empty():
 		return
@@ -451,7 +473,7 @@ func _render_peer(rec: Dictionary, node: Node3D, now: float) -> void:
 
 	var a: Dictionary = buf[0]
 	if buf.size() == 1 or rt <= float(a["t"]):
-		_place(rec, node, a["p"], float(a["y"]))
+		_place(rec, node, a["p"], float(a["y"]), delta)
 		return
 	var b: Dictionary = buf[1]
 	var span := float(b["t"]) - float(a["t"])
@@ -461,15 +483,51 @@ func _render_peer(rec: Dictionary, node: Node3D, now: float) -> void:
 	# A gap this big between consecutive samples is a teleport or a rejoin, not motion. Gliding it
 	# would ski the body across the map, so land on the far side at once.
 	if pa.distance_to(pb) > SNAP_DIST:
-		_place(rec, node, pb, float(b["y"]))
+		_place(rec, node, pb, float(b["y"]), delta)
 		return
-	_place(rec, node, pa.lerp(pb, f), lerp_angle(float(a["y"]), float(b["y"]), f))
+	_place(rec, node, pa.lerp(pb, f), lerp_angle(float(a["y"]), float(b["y"]), f), delta)
 
 
-func _place(rec: Dictionary, node: Node3D, p: Vector3, yaw: float) -> void:
+func _place(rec: Dictionary, node: Node3D, p: Vector3, yaw: float, delta: float) -> void:
+	var prev: Vector3 = rec.get("render", p)
 	node.global_position = p
 	node.rotation.y = yaw
 	rec["render"] = p
+	_drive_anim(rec, node, prev, p, delta)
+
+
+## Feed the peer's animation state machine from the transform we just rendered. The local
+## player answers "how fast am I going" from its CharacterBody3D; a peer has no body and no
+## controller, so the SAME machine is fed the interpolated delta instead. Every _place path
+## funnels through here, so there is one motion source per peer and no second code path.
+##
+## `on_floor` is DERIVED, not known — the wire carries position and yaw only. Treating "barely
+## moving vertically" as grounded lands the same clips the local hero picks: flat ground reads
+## grounded; a jump reads airborne AND rising, so the state machine's own vy > 0.5 test fires
+## the leap; a fall reads airborne but not rising, so it degrades to run/walk exactly as the
+## local hero does with no fall clip. Matching the machine's own threshold keeps the two honest.
+func _drive_anim(rec: Dictionary, node: Node3D, prev: Vector3, cur: Vector3, delta: float) -> void:
+	if delta <= 0.0 or node == null or node.anim == null:
+		return
+	var d := cur - prev
+	var vy := d.y / delta
+	node.anim.update(delta, {
+		"speed": Vector2(d.x, d.z).length() / delta,
+		"vy": vy,
+		"on_floor": absf(vy) < PEER_AIR_VY,
+		"swimming": bool(rec.get("sw", false)),
+		# Still not synced: mount/vehicle state. A mounted peer plays locomotion instead of the
+		# seated GPose, because showing them properly means spawning the mount model too, not
+		# just flipping a flag. Declared rather than silently wrong.
+		"mounted": int(rec.get("mv", -1)) >= 0,
+	})
+	# A mounted peer is posed by the vehicle (GPose.ride/sit), exactly like a local rider, so the
+	# state machine above stands down and the ride is parked under them here.
+	var mv := int(rec.get("mv", -1))
+	if mv >= 0 and _hook_vehicle.is_valid():
+		var v = _hook_vehicle.call(mv)
+		if v != null and is_instance_valid(v) and v.has_method("place_under_remote_rider"):
+			v.place_under_remote_rider(cur, node.rotation.y)
 
 
 ## Buffer depth per peer, for the GOGI_MP_NET line. A depth that sits at 0-1 means we are starved
@@ -531,8 +589,31 @@ func _broadcast_now() -> void:
 	# `ts` is OUR monotonic clock. The receiver maps it onto theirs; we never read anyone else's raw
 	# stamp as if it meant something locally. Sent as an int (ms) because JSON floats are the one
 	# place a timeline can quietly lose precision.
-	_net.send({"t": "p", "x": p.x, "y": p.y, "z": p.z, "r": player.rotation.y,
-		"ts": Time.get_ticks_msec()})
+	var pkt := {"t": "p", "x": p.x, "y": p.y, "z": p.z, "r": player.rotation.y,
+		"ts": Time.get_ticks_msec()}
+	# AVATAR STATE RIDES THE POSITION HEARTBEAT rather than taking its own message kind. It is a
+	# few bytes, and re-sending it 10x/s makes it SELF-HEALING: a late joiner, a dropped packet
+	# and a peer walking back into interest range all correct within 100ms with no handshake and
+	# no join race. This adds bytes, not messages, so the rate budget in the header is untouched.
+	# DEFAULTS ARE OMITTED, so the common packet — unarmed, dry — is byte-identical to before,
+	# and a peer running an OLDER engine simply never sees keys it would not have read anyway.
+	if _hook_state.is_valid():
+		var st: Dictionary = _hook_state.call()
+		var wid := String(st.get("w", ""))
+		if wid != "":
+			pkt["w"] = wid
+		if bool(st.get("stw", false)):
+			pkt["stw"] = 1
+		if bool(st.get("sw", false)):
+			pkt["sw"] = 1
+		# Which ride they are on, as its index in world.json's "vehicles". Every client builds that
+		# list from the same file in the same order, so the index means the same thing everywhere
+		# and the vehicle itself never has to be spawned or described on the wire — it is already
+		# standing in our scene.
+		var mv := int(st.get("mv", -1))
+		if mv >= 0:
+			pkt["mv"] = mv
+	_net.send(pkt)
 
 
 func _on_message(d: Dictionary) -> void:
@@ -545,10 +626,19 @@ func _on_message(d: Dictionary) -> void:
 		"ping": _on_ping(d, id)
 		"pong": _on_pong(d, id)
 		"hit": _on_hit(d, id)
-		"shot": peer_shot.emit(id,
-			Vector3(float(d.get("x", 0.0)), float(d.get("y", 0.0)), float(d.get("z", 0.0))),
-			Vector3(float(d.get("dx", 0.0)), float(d.get("dy", 0.0)), float(d.get("dz", 1.0))),
-			float(d.get("spd", 22.0)), float(d.get("rng", 20.0)))
+		"shot":
+			# Swing the shooter's arm on OUR screen. The shot was already on the wire; only the
+			# animation was missing, so this costs no bandwidth.
+			_peer_attack(id)
+			peer_shot.emit(id,
+				Vector3(float(d.get("x", 0.0)), float(d.get("y", 0.0)), float(d.get("z", 0.0))),
+				Vector3(float(d.get("dx", 0.0)), float(d.get("dy", 0.0)), float(d.get("dz", 1.0))),
+				float(d.get("spd", 22.0)), float(d.get("rng", 20.0)))
+		"emo":
+			# One-shot emote from a peer. Its own message kind on purpose: piggybacking a one-shot
+			# on the 10Hz heartbeat would re-trigger the clip ten times a second for as long as it
+			# stayed in the packet. Fire-and-forget — a dropped emote is a missed wave, not desync.
+			_peer_emote(id, String(d.get("clip", "")), float(d.get("hold", 1.2)))
 		"dead": _on_peer_dead(d, id)
 		"alive": _on_peer_alive(d, id)
 
@@ -730,13 +820,24 @@ func _on_pos(d: Dictionary, id: String) -> void:
 			return   # room full — ignore the extra rather than spawning past the stated cap
 		rec = {"node": null, "pos": Vector3.ZERO, "yaw": 0.0, "last_seen": now,
 			"spawning": false, "buf": [], "off": INF, "render": Vector3.ZERO,
-			"synced": false, "rtt": INF, "rtt_at": now}
+			"synced": false, "rtt": INF, "rtt_at": now,
+			"w": "", "stw": false, "sw": false, "mv": -1,
+			"w_applied": null, "stw_applied": null, "mv_applied": null}
 		_peers[id] = rec
 		# PING THIS ONE NOW, not on the next cadence tick. Until a pong lands we render them with
 		# the latency-biased bootstrap offset, and at PING_EVERY=2s that is two full seconds of a
 		# newly-joined player rendered a whole transit behind — measured at 0.48m for an 80ms link.
 		# Nobody would ever see it as a bug; they would see a peer who "joined weird".
 		_ping_t = PING_EVERY
+
+	# AVATAR STATE lands on the RECORD, not the body: interest culling frees the avatar and keeps
+	# the record, so a peer who walks out of range and back must come back still holding their
+	# weapon. An older engine sends none of these keys and reads as unarmed and dry — the same
+	# degradation the missing-stamp path below takes, and for the same reason.
+	rec["w"] = String(d.get("w", ""))
+	rec["stw"] = int(d.get("stw", 0)) == 1
+	rec["sw"] = int(d.get("sw", 0)) == 1
+	rec["mv"] = int(d.get("mv", -1))
 
 	# WHOSE CLOCK. Two peers' `Time.get_ticks_msec()` are unrelated numbers, so their stamp has to be
 	# mapped onto ours before it can index a timeline.
@@ -785,6 +886,89 @@ func _on_pos(d: Dictionary, id: String) -> void:
 		_spawn_peer(id)
 
 
+## Play the melee/fire swing on a peer's avatar. Mirrors the local call site (main.gd's
+## melee branch): set the hold gate, then kick the clip. Silent when the peer is culled,
+## unknown, or riding the rigless fallback capsule.
+## Bring a peer's held weapon in line with what their client last told us. Cheap to call every
+## frame: two string/bool compares and an early out. The applied-markers are set BEFORE the hook
+## runs because the hook awaits a model fetch — without that this would re-enter every frame for
+## the whole download and queue a dozen equips of the same weapon.
+func _sync_peer_equip(rec: Dictionary, node: Node3D) -> void:
+	if not _hook_equip.is_valid() or node.avatar == null or not is_instance_valid(node.avatar):
+		return
+	var want := String(rec.get("w", ""))
+	var stow := bool(rec.get("stw", false))
+	if rec.get("w_applied", null) == want and rec.get("stw_applied", null) == stow:
+		return
+	rec["w_applied"] = want
+	rec["stw_applied"] = stow
+	_hook_equip.call(node.avatar, want, stow)
+
+
+## Broadcast a one-shot emote to the room. Silent when multiplayer is off, so the rule action
+## works identically in a single-player game.
+func send_emote(clip: String, hold := 1.2) -> void:
+	if not enabled or _net == null or clip == "":
+		return
+	_net.send({"t": "emo", "clip": clip, "hold": hold})
+
+
+## Play a peer's emote on their avatar.
+func _peer_emote(id: String, clip: String, hold: float) -> void:
+	if clip == "":
+		return
+	var rec: Dictionary = _peers.get(id, {})
+	var node = rec.get("node")
+	if node == null or not is_instance_valid(node) or node.anim == null:
+		return
+	node.anim.action(clip, hold)
+
+
+## Seat or unseat a peer on the ride they say they are on. The vehicle already exists in our
+## scene — every client spawns the same world.json list — so this only has to hand it a rider.
+## Hand a peer's ride back before their body goes away. is_instance_valid on the vehicle side
+## already makes a freed rider harmless, but leaving the reference dangling means the ride keeps
+## its remote-owned pose and never re-poses a later rider — cheap to do properly.
+func _release_peer_mount(rec: Dictionary) -> void:
+	var applied = rec.get("mv_applied", null)
+	rec["mv_applied"] = null
+	if applied == null or int(applied) < 0 or not _hook_vehicle.is_valid():
+		return
+	var v = _hook_vehicle.call(int(applied))
+	if v != null and is_instance_valid(v):
+		v.clear_remote_rider()
+
+
+func _sync_peer_mount(rec: Dictionary, node: Node3D) -> void:
+	if not _hook_vehicle.is_valid():
+		return
+	var want := int(rec.get("mv", -1))
+	var applied = rec.get("mv_applied", null)
+	if applied != null and int(applied) == want:
+		return
+	if applied != null and int(applied) >= 0:
+		var old = _hook_vehicle.call(int(applied))
+		if old != null and is_instance_valid(old):
+			old.clear_remote_rider()
+	rec["mv_applied"] = want
+	if want < 0 or node.avatar == null or not is_instance_valid(node.avatar):
+		return
+	var v = _hook_vehicle.call(want)
+	if v != null and is_instance_valid(v):
+		# The AVATAR is the rider, not the body: GPose poses a skeleton, and the body is a bare
+		# capsule. Placement still keys off the body, which is what the wire carries.
+		v.set_remote_rider(node.avatar)
+
+
+func _peer_attack(id: String) -> void:
+	var rec: Dictionary = _peers.get(id, {})
+	var node = rec.get("node")
+	if node == null or not is_instance_valid(node) or node.anim == null:
+		return
+	node.anim.attack_t = 0.45
+	node.anim.play("attack")
+
+
 func _spawn_peer(id: String) -> void:
 	# The avatar is what you SEE; the body is what you COLLIDE WITH and SHOOT. Keeping them separate
 	# means a streamed hero_model never has to carry a script or a collision shape, and the same body
@@ -799,11 +983,24 @@ func _spawn_peer(id: String) -> void:
 	node.name = "GogiPeer_" + id
 	node.add_child(avatar)
 	add_child(node)
+	# ANIMATE THE PEER. Same state machine the local hero runs (hero_anim.gd) — it was four
+	# globals on main.gd until it became per-avatar, which is why peers used to slide around
+	# frozen in their rest pose. attach() returns false on a rigless avatar (the fallback
+	# capsule), and then we simply never drive it.
+	node.avatar = avatar
+	var pa = GHeroAnim.new()
+	node.anim = pa if pa.attach(avatar) else null
 	var rec: Dictionary = _peers.get(id, {})
 	if rec.is_empty():
 		node.queue_free()   # peer aged out while its model was still downloading
 		return
 	rec["node"] = node
+	# A culled peer keeps its RECORD (weapon id and all) but loses its BODY, so the avatar that
+	# just respawned is wearing nothing. Clearing the applied-marker makes the next frame re-equip
+	# it. This is the whole reason weapon state lives on the record and anim state does not.
+	rec["w_applied"] = null
+	rec["stw_applied"] = null
+	rec["mv_applied"] = null
 	# ANNOUNCE ONCE PER PEER, NOT ONCE PER BODY. Interest culling re-runs this function every time
 	# someone walks back into range, and `peer_join` is a RULE-LAYER EVENT (game_shell fires it and
 	# calls announce_synced). Re-emitting would replay a game's join rules on every crossing — and

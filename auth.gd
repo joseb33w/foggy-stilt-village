@@ -1,9 +1,11 @@
 extends Node
 ## Supabase email auth, spoken DIRECTLY to GoTrue's REST API over HTTPRequest.
 ##
-## No supabase-js and no JavaScriptBridge — same reason net.gd does not use them: the native iOS
-## player has no browser and no JS runtime, so anything routed through JS works on the web and
-## nowhere else. One implementation, both tiers.
+## No supabase-js — same reason net.gd does not use it: the native iOS player has no browser and no
+## JS runtime, so anything routed through JS works on the web and nowhere else. Every REQUEST here
+## is HTTPRequest: one implementation, both tiers. The single exception is reading the web handoff
+## token (see WEB_TOKEN_GLOBAL), which is ingress rather than protocol and has a native counterpart
+## on the command line.
 ##
 ## WHY THE ENGINE OWNS THIS. A game that ships its own auth code is game-authored script, which the
 ## data-only gate rejects and the native player cannot execute. So sign-in lives here, in the pack,
@@ -37,9 +39,59 @@ var _expires_at: float = 0.0
 const REFRESH_MARGIN_S := 300.0
 const SESSION_PATH := "user://gogi_auth.json"
 
+## Command-line handoff from a host that has ALREADY identified this player.
+##
+## The native player signs the user into the Gogi app long before a game opens, so making them type
+## a second set of credentials into a game they just tapped is a wall with nothing behind it — the
+## host already knows exactly who they are. It mints a Supabase session server-side (keyed to the
+## signed-in account) and hands the refresh token in here, so `restore_session()` succeeds and
+## auth_gate never draws.
+##
+## A REFRESH TOKEN, NOT AN ACCESS TOKEN, deliberately: it is the only credential this class can act
+## on without also needing an expiry, and it goes through the SAME `/token?grant_type=refresh_token`
+## exchange a returning player's saved session does — one code path, already proven, and a stale or
+## revoked handoff degrades to the normal sign-in prompt instead of a broken session.
+##
+## Passed after a bare `--` so it lands in OS.get_cmdline_user_args() — the documented channel for
+## host arguments, and the same one --world-url uses. NEVER printed: unlike the world URL this is a
+## credential, and the engine logs are visible in a browser console and in device logs.
+const CMDLINE_TOKEN_PREFIX := "--auth-refresh-token="
+
+## Web handoff channel: a JS global the HOST PAGE plants before the engine boots.
+##
+## A web build has no command line. GODOT_CONFIG.args looks like the equivalent seam and is not —
+## injecting there does NOT reach OS.get_cmdline_user_args() (measured 2026-08-24 against a live
+## build). The page is the only thing that can speak to a web build before _ready, so the token is
+## read from a global instead.
+##
+## NOT a query parameter, deliberately. A refresh token in a URL leaks into browser history, the
+## Referer header on every outbound request, and each access log between the tab and R2. A global
+## assigned in-process leaves no trace outside that tab.
+##
+## This is the one place JavaScriptBridge appears in this file, and it does not contradict the class
+## doc above: the auth PROTOCOL is still a single implementation over HTTPRequest for both tiers.
+## Only the INGRESS is tier-specific, exactly as it already is for the native command line.
+const WEB_TOKEN_GLOBAL := "__gogiAuthRefresh"
+
 
 func _ready() -> void:
 	set_process(false)
+
+
+## The refresh token handed in by the host, or "" when the player is opening the game on their own.
+func _handed_token() -> String:
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with(CMDLINE_TOKEN_PREFIX):
+			return a.substr(CMDLINE_TOKEN_PREFIX.length()).strip_edges()
+	if OS.has_feature("web"):
+		# The type is CHECKED rather than assumed. JavaScriptBridge marshals loosely — a JS boolean
+		# comes back as TYPE_INT, not TYPE_BOOL, which is what silently killed every ?flag=1 in
+		# main.gd — and an unset global arrives as null. `|| ""` makes "absent" and "empty" the same
+		# answer so only a real string can ever reach the token exchange.
+		var v = JavaScriptBridge.eval('window.%s || ""' % WEB_TOKEN_GLOBAL, true)
+		if typeof(v) == TYPE_STRING:
+			return String(v).strip_edges()
+	return ""
 
 
 func is_signed_in() -> bool:
@@ -76,6 +128,22 @@ func recover(p_email: String) -> bool:
 ## THIS IS WHAT MAKES THE ACCOUNT FEEL PERSISTENT. Without it every launch is a fresh sign-in
 ## prompt, which for a game is indistinguishable from having lost the account.
 func restore_session() -> bool:
+	# A token handed in by the host WINS over anything cached on this device. The host knows who is
+	# signed in right now; the file only knows who was signed in last time, and on a shared or
+	# re-signed-in device those differ — silently resuming the wrong account is worse than a prompt.
+	var handed := _handed_token()
+	if handed != "":
+		_refresh_token = handed
+		var handed_res := await _post(
+			"/auth/v1/token?grant_type=refresh_token", {"refresh_token": _refresh_token})
+		var handed_out := _adopt(handed_res, "handoff")
+		if bool(handed_out.get("ok", false)):
+			return true
+		# Fall through rather than fail: an expired handoff should land the player on the normal
+		# sign-in screen, not lock them out of a game they can legitimately play.
+		_refresh_token = ""
+		print("GOGI_AUTH handoff rejected — falling back to the saved session")
+
 	if not FileAccess.file_exists(SESSION_PATH):
 		return false
 	var f := FileAccess.open(SESSION_PATH, FileAccess.READ)

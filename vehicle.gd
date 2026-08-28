@@ -1542,6 +1542,11 @@ func _physics_process(delta: float) -> void:
 	# ground snap only matters as terrain streams in under the vehicle, and the label/gait/cull are
 	# cosmetic. Run them ~10x/second instead of ~60x. Driving is untouched — it takes the branch above
 	# at full rate, so handling and feel are identical.
+	# A NETWORK peer is riding this. netsync places it every frame from their transform, so the
+	# parked path below — whose ground snap would drag it back down to the terrain — must not run.
+	# Same reasoning as peer_body's mask-0 AnimatableBody3D: network-driven, never world-pushed.
+	if _remote_rider != null and is_instance_valid(_remote_rider):
+		return
 	_park_t += delta
 	if _park_t < 0.1:
 		return
@@ -1744,6 +1749,84 @@ func _update_ride_motion(delta: float) -> void:
 
 # Park the driver on the boardable for this tick: its marker (posed, visible — SeatMarker for
 # seats, MountMarker for mounts) or the origin (hidden fallback).
+# ── REMOTE RIDER (multiplayer) ────────────────────────────────────────────────────────────────
+## A NETWORK peer riding this vehicle ON OUR SCREEN.
+##
+## Deliberately NOT enter(): that runs the drive state machine, emits drive_state_changed — which
+## swings the LOCAL camera and rebinds input — and plays the boarding SFX. This client is a
+## SPECTATOR of somebody else's ride and must do none of those. What it DOES share is the seating
+## math below, so a peer sits exactly where the local driver would.
+var _remote_rider: Node3D = null
+var _remote_seated := false
+var _remote_seat_y_off := 0.0
+
+
+func set_remote_rider(rider: Node3D) -> void:
+	if _remote_rider == rider:
+		return
+	clear_remote_rider()
+	_remote_rider = rider
+	if rider != null and is_instance_valid(rider):
+		_seat_remote_rider()
+
+
+func clear_remote_rider() -> void:
+	var r := _remote_rider
+	_remote_rider = null
+	_remote_seated = false
+	_remote_seat_y_off = 0.0
+	if r != null and is_instance_valid(r):
+		GPose.stand(r)   # undo the astride/seated pose or they walk around folded
+		r.visible = true
+
+
+## Mirror of _seat_driver for a rider we do not simulate. Same measurements, same thresholds, same
+## closed-cab clearance rule and the same always-visible contract for mounts — a peer must not sit
+## differently from the way the local player sits on the identical vehicle.
+func _seat_remote_rider() -> void:
+	var d := _remote_rider
+	if d == null or not is_instance_valid(d):
+		return
+	var dh := GPose.char_height(d)
+	if dh < 0.5:
+		dh = _world_aabb(d).size.y
+	if dh < 0.5:
+		dh = 1.7
+	var hips := GPose.hips_height(d)
+	if hips <= 0.0:
+		hips = HIP_RATIO * dh
+	if _is_mount:
+		_remote_seat_y_off = 0.12 - hips
+		_remote_seated = GPose.ride(d)
+	else:
+		_remote_seat_y_off = 0.06 - hips
+		_remote_seated = GPose.sit(d)
+		if _remote_seated and _cabin_headroom < INF and (dh - hips) > _cabin_headroom:
+			_remote_seated = false
+			GPose.stand(d)
+	if not _remote_seated:
+		if _is_mount:
+			_remote_seat_y_off = 0.0   # a mount's rider is ALWAYS visible — perch instead
+		else:
+			d.visible = false
+			_remote_seat_y_off = 0.0
+
+
+## Park this vehicle UNDER a rider netsync has already placed. The INVERSE of _track_driver: there
+## the vehicle is authoritative and moves the driver; here the rider came off the wire, so the
+## vehicle moves under them. Only one of the two is ever authoritative, so they cannot fight.
+func place_under_remote_rider(rider_pos: Vector3, yaw: float) -> void:
+	rotation.y = yaw
+	var marker := _mount_marker if _is_mount else _seat_marker
+	if marker == null or not is_instance_valid(marker) or not (_remote_seated or _is_mount):
+		global_position = rider_pos
+		return
+	# The marker's offset from our origin is rigid. Read it AFTER the yaw is set, so it is already
+	# rotated into world space, then subtract it (and the hip drop) from where the rider stands.
+	var off := marker.global_position - global_position
+	global_position = rider_pos - off - Vector3(0.0, _remote_seat_y_off, 0.0)
+
+
 func _track_driver() -> void:
 	if _driver == null or not is_instance_valid(_driver):
 		return
@@ -1875,6 +1958,8 @@ func use(driver: CharacterBody3D) -> bool:
 func enter(driver: CharacterBody3D) -> void:
 	if _state != S_IDLE or driver == null:
 		return
+	if _remote_rider != null and is_instance_valid(_remote_rider):
+		return   # a peer is already riding this one
 	driving = true
 	_driver = driver
 	_speed = 0.0

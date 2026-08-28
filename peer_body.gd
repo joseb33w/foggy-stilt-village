@@ -22,6 +22,19 @@ var dead := false
 
 var _tint: StandardMaterial3D = null
 
+## This peer's animation state machine (hero_anim.gd), or null if the avatar carries no rig
+## (the fallback capsule). Lives HERE, on the body, so it dies with the avatar: interest
+## culling frees the body and _spawn_peer rebuilds both. Contrast the peer's weapon, which
+## must outlive a cull and therefore belongs on the netsync RECORD — derived state on the
+## avatar, authoritative state on the record.
+var anim = null
+
+## The visible avatar this body carries (the fetched hero GLB, or the fallback capsule).
+## Held explicitly rather than reached for by child index — setup() adds a CollisionShape3D
+## first, so "the avatar" was get_child(1), which is exactly the kind of thing that breaks
+## silently the next time a child is added.
+var avatar: Node3D = null
+
 
 func setup(id: String, ns: Node, layer: int) -> void:
 	peer_id = id

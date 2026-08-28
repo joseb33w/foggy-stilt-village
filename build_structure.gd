@@ -177,10 +177,13 @@ static func _add_cap(root: Node3D, cap: String, top_foot: Vector2, height: float
 		_:   # "flat" / unknown -> no cap
 			return
 	if c != null:
-		# `+=`, not `=`: the GShapes factories return primitives PRE-LIFTED so their BASE sits at
-		# local y=0 (wedge/cylinder carry position.y = h/2 over a CENTRED mesh). Assigning wiped
-		# that lift, sinking a gable/spire cap halfway into the storey below — its trimesh collider
-		# hung at head height over an enterable shell's doorway (the unenterable-hut bug).
+		# TRANSLATE, never SET. Every GShapes factory honours ONE contract — the node it returns
+		# already has its BASE at local y=0 — but they reach it two different ways: frustum/dome/
+		# _parapet author geometry base-at-zero (position.y stays 0), while wedge/cylinder lift a
+		# CENTRED primitive (position.y = h/2). Assigning wiped that lift on the second kind, sinking
+		# a gable or spire cap by roof_height/2 into the storey below. Cosmetic on a solid building
+		# (the whole-AABB box absorbs it) but a SHIP-BLOCKER on an enterable shell, where the cap's
+		# own trimesh collider then hung at head height across the doorway (the unenterable-hut bug).
 		c.position.y += height
 		GShapes.set_material(c, roof_mat)
 		# SHELLED buildings skip the whole-AABB box collider (it would seal the doorway), so their
