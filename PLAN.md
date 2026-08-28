@@ -1,39 +1,40 @@
 # Goal
-Turn Heronwade from a peaceful stroll into a bigger open world with combat and
-rides: hostile characters to fight (three factions + a boss), a weapons
-progression the player collects and uses, and a world large enough to drive a
-car, pilot a boat, and fly a plane — all as world.json DATA on the existing
-rpg engine (no game-authored scripts, native-tier preserved).
+Add a dragon to Heronwade: the **Mire Dragon**, a hulking boss creature roosting
+in a new bone-strewn lair in the far south-west bog. Pure world.json DATA on the
+existing rpg engine (no game-authored scripts — native tier preserved): the
+dragon stalks its roost, guards a hoard chest with a new
+top-tier weapon, and is wired into the rumor/bounty/discovery rule layer.
+(Originally authored as an aerial swooper; grounded after the Game-Feel + QA
+passes proved the engine's flyer stand-off ring makes melee engagement a
+spawn-time coin flip — see PR body.)
 
 # Files to touch
-- `world.json` — grid expanded 8×8 → 24×24 (x/z ∈ [-8..15], ~384 m across),
-  existing 64 village cells preserved verbatim. New biomes: the Broad Murk bay
-  (east, terrain carved below water level, boatable), the Reed Barrens + Old
-  Causeway road grid (north, drivable), the Mirewood bog (west), Dragonfly
-  Strip airstrip + the Reaver's Delta (south). New: `weapons` catalog +
-  chest drops, per-cell enemy camps (`rat_bandit`, `pike_pirate`, `bog_lurker`,
-  boss `murk_reaver` with Meshy models), world-level `vehicles[]` (car, boat,
-  plane — Meshy multi-part bodies), new regions + vars/rules/hud (bounty,
-  faction kill scoring), director boss bar + victory, combat HUD unhidden,
-  `max_players` raised to 16 for the bigger map.
-- `quests.json` — director chain extended: village_of_stilts →
-  arm_the_village → clear_the_waters → rout_of_the_reeds (boss).
-- `models/meshy/` — new rigged enemy GLBs + vehicle part GLBs (Meshy specialist).
-- `README.md` — updated feature description.
+- `world.json` —
+  - new region **The Dragon's Roost** (cell [-7,10], world ~[-104,168], music: tension),
+  - roost cells dressed with bones / skulls / dead trees / rock scatter,
+  - lair cell: 1 `mire_dragon` boss (hp 700, dmg 20, height 2.2 -> ~4.6 m body,
+    grounded stalker — the aerial profile's stand-off ring proved a spawn-time
+    coin flip vs its own attack reach, per the Game-Feel pass; Meshy model
+    `models/meshy/mire_dragon.glb`), hoard chest (Dragonfang + 200 gold),
+  - `weapons` += **Dragonfang** (melee, dmg 72 — new top of the curve),
+  - rules: Mirewood rumor toast, roost-entry warning subtitle + shake, aggro
+    stinger (`enemy_detected_player`), half-HP enrage beat (`enemy_hp_crossed`),
+    kill payoff (bounty +300, xp +300, toast), discovery counter (explored max 12→13).
+- `models/meshy/mire_dragon.glb` — new Meshy-generated rigged swamp dragon
+  (G_DRAGON rig-lab clips idle/walk/flap/glide), decimated for mobile;
+  `models/meshy_assets.jsonl` metadata line appended.
+- `README.md` — world/weapons/quest sections updated for the new encounter.
 
 # Verification approach
-qgcheck (winnability incl. kill-count feasibility), canonical verify.mjs on the
-export (packaging, GPU budget, rules-alive), targeted checks: combat delta
-(enemy hp drops via real attack path), enemy AI engages, vehicle board/drive,
-clip resolution on new enemy rigs, mobile two-aspect fill. Game-Feel + QA
+qgcheck (graph unchanged — no new locks; must stay PASS), canonical verify.mjs
+on the export (packaging, GPU budget, rules-alive, character tri gate), frame
+critique of the roost, targeted checks: dragon spawns + engages, clips
+play, kill → bounty rule fires, chest grants Dragonfang. QA + Game-Feel
 specialist passes before ship.
 
 # Out of scope
-- PvP death scoring (`player_died` rules) — deliberately omitted: the engine
-  fires its blocking defeat modal after the rule runs (documented engine
-  follow-up from the previous session), so death keeps the engine's forgiving
-  heal-in-place default.
-- New enterable interiors (the elder's hut interior is preserved unchanged).
-- Enemy in-hand weapon meshes — enemy armament is expressed as data
-  (damage/range/speed profiles + faction weapon drops); the engine attaches
-  weapon visuals to the player only.
+- No changes to the campaign chain / goal (`rout_of_the_reeds` untouched — the
+  dragon is a side encounter; rules-layer only, no quests.json edit since the
+  quest chain is director-managed).
+- No rideable dragon mount (the request says "add a dragon in the game"; the
+  hostile roost encounter is the chosen reading — noted in PR body).

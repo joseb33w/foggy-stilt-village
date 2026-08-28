@@ -1,120 +1,63 @@
-# Game-Feel / Mobile-UX Report — Heronwade (feat/combat-vehicles-expansion)
+# Game-Feel / Mobile-UX report — "Heronwade" CONTINUE build (Mire Dragon encounter)
 
-**VERDICT: FAIL (0 P0, 2 P1 must-fix)** — touch play is fully alive and the HUD fits both
-orientations, but the headline feature of this build (the boss encounter) ships with a walled
-camera and an illegible HUD collision in portrait. Both are must-fix before this reads as done.
+**VERDICT: PASS — 0 P0, but 3 ❗P1 must-fix feel defects in the new boss encounter.**
 
-Method: drove the real web export headlessly through the sign-in gate using **CDP touch events
-only** (no keyboard/mouse for gameplay verbs), at 720×1280, 390×844, 844×390 and 1280×720.
-Evidence screenshots + full console logs: `/tmp/gf/*.png`, `/tmp/gf/log-*.txt`.
-`out/world.json` was restored to the pristine build file afterwards. Note: another agent was
-concurrently rewriting `out/world.json` (a port-5293 probe variant); my harness serves its probe
-world from memory, so my results are race-free, but coordinate future probe scheduling.
+Build: `cloud-hdro8hilebm5ifgmt2hy` · Scope: session delta (The Mire Dragon @ cell [-7,10], "The Dragon's Roost") + mobile HUD/touch regression.
+Method: drove a local offline copy of the export (multiplayer off, start_cell at the roost — copies only, repo/out untouched) in software-GL Chromium at **portrait 400×860 and landscape 860×400**, using **real CDP touch events** (not mouse), across **5 full boots** (~15 min of play). Evidence frames in `/tmp/feel/*.png` (p400/f400/l860/b400/k400/c400 series). Note: software GL dilates game-time ~2–3× vs wall clock; all timings below account for that.
 
 ---
 
-## ❗ P1 — Boss-fight camera is walled by the Murk Reaver at melee range (portrait)
+## ❗ P1 — The boss disengages / never engages: its hover stand-off ring is OUTSIDE its own attack range (spawn-time dice roll)
 
-**Symptom** (`/tmp/gf/bossmelee-m1.png`, `bossmelee-m2.png`, `boss-b1-portrait.png`): once the
-5 m boss (`enemy_height: 5.0` at cell [13,12]) closes to melee, its mesh fills **~85% of the
-portrait frame** and the player character is completely invisible — reproduced across repeated
-ATTACK taps 4 s apart, i.e. this is the steady state of every melee exchange with the boss, not a
-transient. The screen reads as a dark full-frame smear / "monster popup". Normal 1.8 m enemies are
-fine (`combat-c3-end.png`: two bandits at point-blank, clean framing) — this is specific to the
-oversized boss.
+**Symptom (observed, 5/5 boots):** the fight never sustains. In 2 of 5 boots the dragon **never attacked once** in 200+ s while the player stood (and attacked) in the middle of its roost — it hovers ~8 m off as a passive statue (screenshots `b400_bend`, `k400_b99`: full player HP, dragon only a dot on the minimap for 3+ minutes). In a third boot it took 11 sweep-the-roost movement cycles to force a single hit (`c400` log: `dragon_aggro` only at t=247s). In the boots where it did engage immediately (spawned close), it landed ~8 hits then drifted back out and the player passively regenned to full (`f400_calm1`).
 
-**Root cause**: two mechanisms exist but neither covers a 5 m body:
-- `main.gd` `cam_spring.collision_mask = L_WORLD` — the SpringArm never collides with enemies, so
-  the camera can sit against/inside the boss volume.
-- `enemy.gd:695` near-camera fade hides the mesh only when camera-to-body-centre
-  `<= max(CAM_FADE_NEAR=1.6, 0.45*body_h)` = **2.25 m** for the boss — but a 5 m-tall, several-m-wide
-  body walls a portrait frame from 4–8 m away (camera rides at `CAM_DIST=8.5` behind the player,
-  who stands at 2.4 m melee reach). The threshold never trips during a normal exchange.
+**Root cause (verified in code):** `enemy.gd` — flyers hold a stand-off slot at `max(SWIM_KEEP, surround_radius) * _air_keep` (line ~321), with `surround_radius = attack_range * 0.85` (line 167) and `_air_keep = randf_range(0.75, 1.7)` (line 146). Attack (and therefore the swoop) only triggers at horizontal `dist <= attack_range` (6.0 for this cell). So whenever `_air_keep > ~1.18` — **a ~55% coin flip at spawn** — the dragon's own AI parks it permanently outside its attack trigger, and it never initiates; even good rolls stall after the keep-away pushes it back out post-swoop. A melee player (reach 2.4 m horizontal) cannot start the fight either — only walking directly under the hover point transiently triggers it.
 
-**Fix direction**: for bodies over `MAX_ENEMY_H` (the authored-giant path), fade/dither by distance
-to the mesh **AABB surface** instead of the centre (or hide when the camera is inside the AABB
-inflated ~1 m), and/or raise the fade multiplier for giants (0.45 → ~0.9 of body_h), and/or
-auto-raise camera pitch when the acquired melee target is a giant. Do NOT fix by shrinking the boss
-— the 5 m silhouette at approach range (`boss-b2-landscape.png`) is good drama; only melee framing
-is broken.
+**Fix direction:** clamp the aerial stand-off below the attack trigger, e.g. in `enemy.gd` where the flyer slot is computed: `keep = minf(keep, attack_range - 0.5)` (or cap `_air_keep` so `keep <= attack_range * 0.9` when the cell authored a boss `enemy_range`). Data-only mitigation (raising `enemy_range`) does NOT work — `surround_radius` scales with it, so the ratio and the coin flip stay the same.
 
-## ❗ P1 — Boss bar collides with the stats line and the BOUNTY readout (portrait)
+## ❗ P1 — The dragon renders ~2–2.5× oversized and eclipses the portrait frame at close range
 
-**Symptom** (`boss-b1-portrait.png`, `bossmelee-m1.png`, and the coordinator's own
-`probe-game.png`): within 60 m of the boss at 720×1280, "**THE MURK REAVER**" overprints the
-top-left stats line — "XP 0/30 Gold 0" becomes illegible garbage — and the **BOUNTY 0** readout is
-printed directly ON the boss HP bar, obscuring both. Three HUD elements stack in one band.
-Landscape is legible (`boss-b2-landscape.png`) — this is portrait-only.
+**Symptom (observed):** at first contact the dragon's torso/leg fills ~85–90% of the portrait screen for several seconds with the hero a sliver underneath (`p400_hud0`, `p400_premove`, `f400_t0`); one swoop frame (`f400_f2`) shows a wing+talon slab covering the upper half of the frame. It reads exactly like the "monster popup" failure mode. (The camera never clipped *inside* the mesh in any frame — the SpringArm ignores enemies and the near-fade hides it at true point-blank — so this is P1, not P0.)
 
-**Root cause**: `game_shell.gd::_relayout()` (line ~850) pins the boss name at y=12 / bar at y=44,
-top-centre — the same band `main.gd::_relayout_ui()` gives the stats block (`stats.position =
-(ml, mt)`, 3 lines of 22 px text ending ~x 360 in portrait, so the centred name overlaps it). And
-`rules.gd::_engine_hud_rects()` collects buttons/stats/hp/minimap but **omits every GameShell
-surface** (`_boss_root`, `_quest_lbl`, `_toast_lbl`), so `_place_clear()` believes (372, 38) — the
-middle of the boss bar — is free and puts the BOUNTY readout there. The "GOGI_HUD_FIT UNRESOLVED"
-tripwire never fires because the fitter can't see the obstacle it's overlapping.
+**Root cause (verified by measuring the GLB):** `models/meshy/mire_dragon.glb` is a normalized rig — skinned mesh AABB **0.48 m tall × ~1.0 m long**, bone Y-span **0.36 m**, global scale 1. `enemy.gd` scales the model **to `enemy_height` by its HEIGHT** (`m3.scale *= max_h / mh`, ~line 218). Height is a horizontal dragon's *smallest* dimension: scaling to 4.5 m tall makes it **~9.4–12.5 m long/winged** (×9.4 if it measures the mesh envelope, ×12.5 if the bone span wins). That matches the frames — next to the 1.73 m hero it reads as a 10 m+ colossus, not the authored 4.5 m. Consequently the near-camera fade (`set_camera_near`, threshold `max(1.6, 0.45 * body_h)` ≈ 2.0 m) is tuned to its *height* and never fires while a 10 m wing sits 3–6 m from the lens filling the screen.
 
-**Fix direction**: (a) add the shell's visible surfaces (at minimum `_boss_root`) to
-`_engine_hud_rects()` so world readouts dodge the boss bar; (b) in portrait, drop the boss bar
-below the top text band (e.g. `y = stats bottom + 8` instead of the hardcoded 44/-32), or
-right-size `_boss_name` width to the bar and give it a shadow/background so it can't overprint.
+**Fix direction (either/both):** (a) data: author `enemy_height` ≈ 2.0–2.5 for this model so the *span* lands near the intended 4.5–6 m bulk; (b) engine: key the near-camera fade on the model's largest AABB extent (or projected screen coverage) instead of `body_h` alone, so any oversized mesh fades before it walls a phone screen.
+
+## ❗ P1 — The camera cannot look at the boss: pitch clamp (+14°) < the dragon's hover elevation (~30–50°), so most damage arrives from off-frame
+
+**Symptom (observed):** during the engaged stretch (`f400_f3`–`f8`) the player's HP bar visibly drains for ~30 s with **no dragon anywhere in frame** — it hovers 5 m overhead just outside the top of the view, and the `dragon_aggro` beat itself fired with an empty sky on screen (`c400_c11`). On a phone this reads as invisible chip damage; no overhead-threat indicator is discernible in any frame.
+
+**Root cause:** `main.gd` `CAM_PITCH_MAX := 0.25` rad (≈14° up — deliberately tight to protect the sky from drag-look). The dragon at `enemy_hover` 5.0 m and 4–9 m horizontal sits at 30–50° elevation: **the orbit camera physically cannot frame it** until it is >~20 m away or mid-swoop. Every other enemy in the game is grounded, so this only bites the new encounter.
+
+**Fix direction:** any one of — raise the pitch clamp toward ~0.6 rad when an aerial enemy is engaged; lower `enemy_hover` (e.g. 2.5–3 m) so the hover sits inside the reachable frame; or add a brief camera lift/target-bias while the boss is within its `show_within` radius. (Melee itself is fine — the hit test ignores Y (`to.y = 0`), so swoop-timed melee connects; the problem is purely that the player can't *see* the thing hitting them.)
 
 ---
 
-## ✅ Touch controls (the P0 class — verified alive, touch-only)
+## ✅ Touch controls — one-handed play works via the real touch path
 
-- Sign-in gate: fields + Sign-in button all operable via touch taps.
-- **Joystick** (left-half drag-hold): 20.8 m on foot; drives all three vehicles (buggy 20.9 m/5 s,
-  skiff 41.9 m/9 s, Dragonfly 83.8 m/9 s). One earlier 0.4 m reading was the buggy parked
-  nose-against-an-obstacle (keyboard moved it 0.06 m in the same state) — environmental, not input.
-- **Drag-look** (right-half): 1.56 rad on foot, works mounted on all three vehicles; pitch clamps
-  hold at both extremes — no scalp/sky stare (`base-p3`, `base-p4`).
-- **Buttons** via touch: ATTACK lands kills (kill rules fired touch-only), JUMP leaves the ground
-  (vy=5.9), SHEATHE⇄DRAW relabels and stows the torch (`base-p5`), DISMOUNT appears on board,
-  sits in the thumb grid (row-3 left column), and exits car/boat/plane. Button taps do NOT hijack
-  the camera (`_touch_on_hud` guard works).
-- **Two-thumb multi-touch**: simultaneous move (30.3 m) + look (1.44 rad), and the left thumb keeps
-  driving after the right lifts. (CDP-emulated; see caveats.)
+Verified with CDP `Input.dispatchTouchEvent` (no mouse): left-half joystick drag moves the player (`p400_premove`→`postmove`, world + minimap moved); right-half drag orbits the camera (yaw change `postmove`→`postlook`); ATTACK tap fires the melee swing (mid-swing pose captured), SHEATHE tap toggles to DRAW with the weapon visibly stowed, JUMP tap goes airborne, POTION taps accepted. Button grid sits in the right-thumb zone, joystick zone owns the left half — no cross-eating observed.
 
-## ✅ HUD fits phone aspects; no debug text
+## ✅ HUD fits phone portrait AND landscape — no clipping, no overflow, no debug text
 
-720×1280, 390×844 (small portrait), 844×390 (short landscape), 1280×720 all render every control
-on-screen, no clipping, no button under the half-line (`base-p6`…`p8`). The short-side UI rescale
-(`_fit_ui_scale`) keeps buttons/text at designed size in landscape. No fps counters, coordinate
-dumps or netsync overlays ship — `?hudgrid=1` / `?mpdebug=1` / `?soak=1` are opt-in and off. The
-`Inv:` line truncates at 43 chars + "…" so a full 6-weapon inventory can't overflow the width.
+`GOGI_HUD_GRID` portrait: vp 720×1548, rows 1064/1212/1360 — all on-screen; landscape: vp 1548×720, scale 1.78, rows 345/457/568 — all on-screen (`l860_postmove`). Short-side UI rescale works (buttons same physical size both orientations). Quest tracker, HP bar, minimap, BOUNTY/PLACES SEEN counters all inside edges. No fps/coordinate/debug text ships (`hud_debug` off, GOGI lines are console-only, director hides the stats block).
 
-## ✅ Transient vs persistent UI
+## ✅ Transient vs persistent UI — nothing pinned
 
-Region names ("The Reed Road", "The Broad Murk") are 2.2 s toasts that fade — verified gone 8 s
-later (`base-p1` vs `base-p2`). No pinned zone label. Interaction affordance ("USE > Drive
-Dragonfly") is contextual. Victory/damage do not pin text.
+"The Dragon's Roost" region name is a **toast (2.2 s hold + fade)** via `_toast(best, 2.2)` in `game_shell.gd:_update_region` — confirmed gone in later frames (`f400_calm0/1`), not pinned. Roost-entry subtitle (hold 5 s) and aggro subtitle both cleared on schedule (`f400_calm0/1` show a clean HUD). Apparent long toast lifetimes in early frames are the software-GL time dilation, not a decay bug — decay is delta-driven and completes.
 
-## ✅ Damage feedback is non-modal
+## ✅ Feedback is non-modal; shake amounts are safe
 
-HP 100→34 under a bandit pack with zero popups/banners: feedback is directional hit-marks + camera
-kick (the full-screen red flash was deliberately removed, `main.gd::_flash_hurt`). No modal fired
-in any run (no `GOGI_MODAL` outside authored dialogue).
+`player_damaged` → 0.15 cam kick + HP bar, no popup/dialog. Rule shakes 0.3/0.45/0.35 map to ≤±0.16 m camera offset decaying in ~0.2–0.5 s — a firm thud, nowhere near nauseating. `roost_warn` (subtitle+shake 0.3) and `dragon_aggro` (thunder+subtitle+shake 0.45) both fired live and read well.
 
-## ⚠️ Polish (non-blocking)
+## ⚠️ Polish
 
-1. **Quest tracker verbosity**: the full 4-objective checklist (9 wrapped lines of yellow text)
-   is pinned top-left for the whole session (`base-p1`), covering ~¼ of the portrait play view in
-   fog-heavy scenes. Consider current-objective-only (the data is per-step in quests.json).
-2. **Readout placement drift**: BOUNTY is authored `top_left` but the collision-dodger relocates it
-   per-context (usually top-centre at (372,38); bottom-left when crowded); PLACES SEEN (`top_right`)
-   lands bottom-right, 8 px under the ATTACK button where a resting thumb covers it. Functional,
-   never overlapping (except the boss-bar case above), but the two build-advertised readouts are
-   not where a returning player last saw them.
-3. **Fly dismount mid-air**: tapping DISMOUNT during the take-off run exited with the player
-   briefly mid-air beside the plane (`fly-v3-after-dismount.png`) before dropping into the bay.
-   `exit()` is documented as braked-descent-safe and the player landed in water; worth one native
-   sanity pass.
+1. **Landscape subtitle underlaps the right thumb grid** — subtitle box spans to x=0.78·vp while the button columns start at ~0.68·vp, so the roost-entry line renders under/over the SHEATHE button (`l860_postmove`). Narrow the subtitle to ~0.5·vp (or end it at the button column) in `game_shell.gd:_relayout`.
+2. **Portrait region toast overlaps the quest tracker** for its ~3 s life (toast at y≈0.16·vp sits inside the quest block at y 140–340vp) — two yellow text blocks interleave illegibly at the exact moment you arrive somewhere new (`p400_hud0`). Nudge toast y below the tracker or hide the tracker while a toast shows.
+3. **No HP feedback for a 700 HP boss** — `director.boss` only knows `murk_reaver`, so the Mire Dragon gets no boss bar; the only mid-fight state cue is the one-shot enrage subtitle. Consider generic boss-bar support keyed on authored `enemy_height`/`enemy_hp`, or a second boss entry.
+4. **Stats debug-ish block flashes at boot** — "Lv 1 HP … Inv: [Reed Torch]" is visible for the first seconds until rules load and `hide_hud: ["stats"]` applies (`l860_hud0`). Apply `hide_hud` before first frame if cheap.
 
 ## Could not verify (sandbox limits)
 
-- Real multi-touch digitizer feel (CDP-emulated touch only), haptics, and true frame pacing on a
-  phone GPU (this container is software-GL).
-- Notch/safe-area insets: `_safe_insets()` clamps correctly in code, but the web container reports
-  zero insets, so the notch path was not exercised with real values.
-- Supabase reachability from a real device (container TLS artifact forced the local /sb proxy).
+- **Enrage (half-HP) and kill/hoard payoffs live** — the engagement P1 above meant no boot produced 350+ dmg dealt; even with a low-HP copy the dragon stayed out of melee reach. Beats are well-formed in `world.json` and use the exact subtitle/shake/toast paths proven above, but the enrage beat, kill toast, Dragonfang chest, and death-crash feel were not rendered. Re-verify after the engagement fix.
+- **Mirewood rumor toast in situ** (spawned at the roost, not Mirewood) — rule present and `once`, toast path proven.
+- Thunder SFX (container has no audio device), true multi-touch feel (joystick+button simultaneously — single-sequence touch only), and real-device notch/safe-area (engine has explicit safe-area handling with a 12% clamp; web tier unaffected).

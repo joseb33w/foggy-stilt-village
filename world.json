@@ -268,6 +268,15 @@
    ],
    "radius": 40,
    "music": "tension"
+  },
+  {
+   "name": "The Dragon's Roost",
+   "center": [
+    -104,
+    168
+   ],
+   "radius": 30,
+   "music": "tension"
   }
  ],
  "cells": [
@@ -1217,6 +1226,20 @@
      "pos": [
       -1.1,
       4.1
+     ]
+    },
+    {
+     "url": "props/kk_halloween/bone_A.glb",
+     "pos": [
+      4.5,
+      2.0
+     ]
+    },
+    {
+     "url": "props/kk_halloween/tree_dead_medium.glb",
+     "pos": [
+      -2.5,
+      -5.0
      ]
     }
    ]
@@ -2379,6 +2402,20 @@
       1.1,
       -5.1
      ]
+    },
+    {
+     "url": "props/kk_halloween/bone_B.glb",
+     "pos": [
+      -2.0,
+      3.5
+     ]
+    },
+    {
+     "url": "props/q_unature/CommonTree_Dead_3.glb",
+     "pos": [
+      3.5,
+      1.0
+     ]
     }
    ]
   },
@@ -2387,41 +2424,89 @@
     -7,
     10
    ],
-   "ground": "grass",
+   "ground": "dirt",
    "scatter": [
     {
-     "kind": "plant",
-     "count": 21
+     "url": "props/kk_halloween/bone_A.glb",
+     "count": 9
     },
     {
-     "kind": "bush",
-     "count": 8
-    },
-    {
-     "kind": "tree",
-     "count": 4
+     "url": "props/q_unature/CommonTree_Dead_1.glb",
+     "count": 5
     },
     {
      "kind": "rock",
-     "count": 3
+     "count": 6
     }
    ],
    "props": [
     {
-     "kind": "log",
+     "url": "props/kk_halloween/ribcage.glb",
      "pos": [
-      -3.9,
-      -5.9
+      3.5,
+      -2.5
+     ]
+    },
+    {
+     "url": "props/kk_halloween/skull.glb",
+     "pos": [
+      -2.5,
+      3.0
+     ]
+    },
+    {
+     "url": "props/kk_halloween/bone_B.glb",
+     "pos": [
+      1.0,
+      4.5
+     ]
+    },
+    {
+     "url": "props/kk_halloween/bone_C.glb",
+     "pos": [
+      -4.0,
+      -3.5
+     ]
+    },
+    {
+     "url": "props/kk_halloween/tree_dead_large.glb",
+     "pos": [
+      -5.5,
+      -5.5
      ]
     },
     {
      "kind": "rock",
      "pos": [
-      -3.9,
-      -0.2
+      5.5,
+      3.5
+     ]
+    },
+    {
+     "kind": "rock",
+     "pos": [
+      -5.0,
+      5.5
      ]
     }
-   ]
+   ],
+   "enemies": 1,
+   "enemy_type": "mire_dragon",
+   "enemy_hp": 700,
+   "enemy_damage": 20,
+   "enemy_speed": 1.1,
+   "enemy_height": 2.2,
+   "enemy_model": "/cloud-hdro8hilebm5ifgmt2hy/models/meshy/mire_dragon.glb",
+   "chest": {
+    "pos": [
+     5.0,
+     -5.0
+    ],
+    "contents": [
+     "dragonfang"
+    ],
+    "gold": 200
+   }
   },
   {
    "cell": [
@@ -2460,6 +2545,20 @@
      "pos": [
       2.7,
       -3.2
+     ]
+    },
+    {
+     "url": "props/kk_halloween/bone_C.glb",
+     "pos": [
+      -3.0,
+      1.5
+     ]
+    },
+    {
+     "url": "props/kk_halloween/tree_dead_medium.glb",
+     "pos": [
+      4.0,
+      4.5
      ]
     }
    ]
@@ -3661,6 +3760,13 @@
      "pos": [
       0.4,
       1.1
+     ]
+    },
+    {
+     "url": "props/kk_halloween/bone_A.glb",
+     "pos": [
+      -4.5,
+      -1.5
      ]
     }
    ]
@@ -21247,7 +21353,7 @@
    "init": 0,
    "scope": "player",
    "min": 0,
-   "max": 12
+   "max": 13
   },
   "bounty": {
    "init": 0,
@@ -21620,6 +21726,110 @@
     }
    ],
    "once": true
+  },
+  {
+   "id": "seen_12",
+   "when": {
+    "event": "enter_region",
+    "target": "The Dragon's Roost"
+   },
+   "then": [
+    {
+     "add": "explored",
+     "value": 1
+    }
+   ],
+   "once": true
+  },
+  {
+   "id": "roost_rumor",
+   "when": {
+    "event": "enter_region",
+    "target": "The Mirewood"
+   },
+   "then": [
+    {
+     "toast": "Wingbeats in the fog... the herons say something old roosts in the bog far to the south."
+    }
+   ],
+   "once": true
+  },
+  {
+   "id": "roost_warn",
+   "when": {
+    "event": "enter_region",
+    "target": "The Dragon's Roost"
+   },
+   "then": [
+    {
+     "subtitle": "Burnt reeds. Gnawed bones. Great wingbeats stir the fog overhead..."
+    },
+    {
+     "shake": 0.3
+    }
+   ],
+   "once": true
+  },
+  {
+   "id": "dragon_aggro",
+   "when": {
+    "event": "player_damaged"
+   },
+   "then": [
+    {
+     "sound": "thunder"
+    },
+    {
+     "subtitle": "The Mire Dragon drops from the fog, wings hammering the reeds!"
+    },
+    {
+     "shake": 0.45
+    }
+   ],
+   "once": true,
+   "if": {
+    "in_region": "The Dragon's Roost"
+   }
+  },
+  {
+   "id": "dragon_enrage",
+   "when": {
+    "event": "enemy_hp_crossed",
+    "target": "mire_dragon",
+    "at": 0.5
+   },
+   "then": [
+    {
+     "sound": "thunder"
+    },
+    {
+     "subtitle": "The dragon shrieks - its torn wings beat harder!"
+    },
+    {
+     "shake": 0.35
+    }
+   ],
+   "once": true
+  },
+  {
+   "id": "bounty_dragon",
+   "when": {
+    "event": "kill",
+    "target": "mire_dragon"
+   },
+   "then": [
+    {
+     "add": "bounty",
+     "value": 300
+    },
+    {
+     "grant_xp": 300
+    },
+    {
+     "toast": "The Mire Dragon crashes into the bog. The roost falls silent."
+    }
+   ],
+   "once": true
   }
  ],
  "director": {
@@ -21741,6 +21951,13 @@
    "kind": "melee",
    "damage": 60,
    "rate": 1.4,
+   "model": "parametric:sword"
+  },
+  "dragonfang": {
+   "name": "Dragonfang",
+   "kind": "melee",
+   "damage": 72,
+   "rate": 1.35,
    "model": "parametric:sword"
   }
  },
