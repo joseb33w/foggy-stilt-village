@@ -3799,7 +3799,7 @@
    "enemy_hp": 900,
    "enemy_damage": 24,
    "enemy_speed": 1.0,
-   "enemy_height": 2.5,
+   "enemy_height": 3.0,
    "enemy_model": "/cloud-nusrgc4jlryff4h2e2cr/models/meshy/hydra_dragon.glb",
    "chest": {
     "pos": [
@@ -21818,7 +21818,7 @@
      "sound": "thunder"
     },
     {
-     "subtitle": "The Mire Dragon drops from the fog, wings hammering the reeds!"
+     "subtitle": "A dragon drops from the fog, wings hammering the reeds!"
     },
     {
      "shake": 0.45
