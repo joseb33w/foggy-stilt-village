@@ -208,10 +208,15 @@ var hud_debug := false           # ?hudgrid=1 / --hudgrid — overlay the live H
 ## the keyboard (or a raw left-half touch, which is not a HUD button) — so nothing it needs to do
 ## depends on the controls being drawn.
 var capture_mode := false
-# Internal 3D resolution while recording, as a fraction of the capture viewport. 1.0 = render at the
-# full recorded size. Overridable with ?rscale= so the fps/sharpness curve can be measured without a
-# rebuild — every earlier data point was taken at the mobile 0.58 and is not comparable.
-var capture_render_scale := 1.0
+# Internal 3D resolution while recording, as a fraction of the capture viewport. Set from ?rscale=,
+# which the recorder always passes, so this number is really just the fallback for a capture driven
+# by something else.
+#
+# It defaults to the mobile 0.58 because MEASURED, this is the sharpest setting that still moves:
+# the recorder rasterizes on the CPU, cost is quadratic here, and 1.0 took a real 30s capture from
+# 7.0fps to 2.5fps. Sharper frames that arrive twice a second are a worse card than soft ones that
+# animate. Do not raise the default without also removing the recorder's real-time constraint.
+var capture_render_scale := 0.58
 var _hud_dbg_lbl: Label = null
 ## ?mpdebug=1 / --mpdebug — peer sync health on screen. Exists because the whole netsync rewrite is
 ## INVISIBLE on a phone: a correctly-interpolated peer and one being held by a starved buffer look
@@ -265,7 +270,7 @@ func _ready() -> void:
 			mp_debug = true
 		if _query_flag("capture"):
 			capture_mode = true
-			capture_render_scale = clampf(_query_num("rscale", 1.0), 0.25, 1.0)
+			capture_render_scale = clampf(_query_num("rscale", capture_render_scale), 0.25, 1.0)
 			print("GOGI_CAPTURE render_scale=%.2f" % capture_render_scale)
 	elif _pending_world_url == "":
 		# Launch value. Skipped entirely on a runtime swap, or the command line would be adopted first
@@ -918,14 +923,15 @@ func _process(delta: float) -> void:
 	# fill-rate cut for mobile: the sustained camp lag is per-pixel 3D shading, so render the 3D at a lower
 	# internal resolution (bilinear-upscaled). 0.75->0.58 ground / 0.5->0.44 air — a big pixel-count cut a weak
 	# mobile GPU feels directly; barely visible with the 2D HUD at full res.
-	# CAPTURE IS NOT A PHONE, and inheriting the phone's cut is where the blurry feed loop came from.
-	# The scales below are a deliberate fill-rate trade for a weak mobile GPU, but the recorder is a
-	# server rendering into a 360x780 video that the feed then displays FULL SCREEN — so at 0.58 the
-	# 3D was rasterized at 209x452 and stretched ~6x on the phone. That also explains why an earlier
-	# experiment found raising the capture resolution "barely visible": the outer size went up while
-	# this inner scale stayed at 0.58, so most of the added pixels were discarded before shading.
-	# capture_render_scale is a knob rather than a constant so arms can be measured against ONE build
-	# (?capture=1&rscale=0.75) instead of needing a rebuild per data point.
+	# CAPTURE IS NOT A PHONE — but it is something WORSE. The recorder has no GPU at all; swiftshader
+	# rasterizes every pixel on the CPU, so this scale costs frame rate quadratically and there is no
+	# hardware headroom to absorb it. At 0.58 the 3D is rasterized at 209x452 and stretched on the
+	# phone, which is genuinely soft; at 1.0 it is sharp and arrives 2.5 times a second, which is
+	# worse. Both arms were measured on the live service, 30s of the same game: 7.0fps vs 2.5fps.
+	#
+	# So this stays a knob (?capture=1&rscale=0.75), and the knob is not where the real win is. The
+	# recorder is bound by having to produce frames in REAL TIME; the sharpness ceiling moves when
+	# that constraint goes, not when this number does.
 	var want_scale := capture_render_scale if capture_mode else \
 		(0.44 if (active_vehicle != null and is_instance_valid(active_vehicle) and active_vehicle._airborne) else 0.58)
 	if not is_equal_approx(get_viewport().scaling_3d_scale, want_scale):
