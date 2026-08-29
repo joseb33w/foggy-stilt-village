@@ -3728,48 +3728,86 @@
     -6,
     10
    ],
-   "ground": "grass",
+   "ground": "dirt",
    "scatter": [
     {
-     "kind": "plant",
-     "count": 23
+     "url": "props/kk_halloween/bone_A.glb",
+     "count": 7
     },
     {
-     "kind": "bush",
-     "count": 8
-    },
-    {
-     "kind": "tree",
+     "url": "props/q_unature/CommonTree_Dead_1.glb",
      "count": 4
     },
     {
      "kind": "rock",
-     "count": 3
+     "count": 5
     }
    ],
    "props": [
     {
-     "kind": "log",
+     "url": "props/kk_halloween/ribcage.glb",
      "pos": [
-      -5.0,
-      -2.9
+      -3.0,
+      2.5
+     ]
+    },
+    {
+     "url": "props/kk_halloween/skull.glb",
+     "pos": [
+      2.5,
+      -3.0
+     ]
+    },
+    {
+     "url": "props/kk_halloween/bone_B.glb",
+     "pos": [
+      -1.5,
+      -4.0
+     ]
+    },
+    {
+     "url": "props/kk_halloween/bone_C.glb",
+     "pos": [
+      4.0,
+      4.0
+     ]
+    },
+    {
+     "url": "props/kk_halloween/tree_dead_large.glb",
+     "pos": [
+      6.0,
+      -6.0
      ]
     },
     {
      "kind": "rock",
      "pos": [
-      0.4,
-      1.1
+      -5.5,
+      -2.0
      ]
     },
     {
-     "url": "props/kk_halloween/bone_A.glb",
+     "kind": "rock",
      "pos": [
-      -4.5,
-      -1.5
+      4.5,
+      1.5
      ]
     }
-   ]
+   ],
+   "enemies": 1,
+   "enemy_type": "hydra_dragon",
+   "enemy_hp": 900,
+   "enemy_damage": 24,
+   "enemy_speed": 1.0,
+   "enemy_height": 2.5,
+   "enemy_model": "/cloud-nusrgc4jlryff4h2e2cr/models/meshy/hydra_dragon.glb",
+   "chest": {
+    "pos": [
+     -5.0,
+     5.0
+    ],
+    "gold": 250
+   }
   },
   {
    "cell": [
@@ -21749,7 +21787,7 @@
    },
    "then": [
     {
-     "toast": "Wingbeats in the fog... the herons say something old roosts in the bog far to the south."
+     "toast": "Wingbeats in the fog... the herons say TWO dragons roost in the bog far to the south - and one has three heads."
     }
    ],
    "once": true
@@ -21762,7 +21800,7 @@
    },
    "then": [
     {
-     "subtitle": "Burnt reeds. Gnawed bones. Great wingbeats stir the fog overhead..."
+     "subtitle": "Burnt reeds. Gnawed bones. Two sets of wingbeats stir the fog overhead..."
     },
     {
      "shake": 0.3
@@ -21827,6 +21865,46 @@
     },
     {
      "toast": "The Mire Dragon crashes into the bog. The roost falls silent."
+    }
+   ],
+   "once": true
+  },
+  {
+   "id": "hydra_enrage",
+   "when": {
+    "event": "enemy_hp_crossed",
+    "target": "hydra_dragon",
+    "at": 0.5
+   },
+   "then": [
+    {
+     "sound": "thunder"
+    },
+    {
+     "subtitle": "All three heads scream at once - the blue scales flush ember-red!"
+    },
+    {
+     "shake": 0.35
+    }
+   ],
+   "once": true
+  },
+  {
+   "id": "bounty_hydra",
+   "when": {
+    "event": "kill",
+    "target": "hydra_dragon"
+   },
+   "then": [
+    {
+     "add": "bounty",
+     "value": 350
+    },
+    {
+     "grant_xp": 350
+    },
+    {
+     "toast": "The three-headed dragon collapses. The roost is truly silent."
     }
    ],
    "once": true
