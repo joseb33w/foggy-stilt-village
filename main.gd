@@ -208,6 +208,10 @@ var hud_debug := false           # ?hudgrid=1 / --hudgrid — overlay the live H
 ## the keyboard (or a raw left-half touch, which is not a HUD button) — so nothing it needs to do
 ## depends on the controls being drawn.
 var capture_mode := false
+# Internal 3D resolution while recording, as a fraction of the capture viewport. 1.0 = render at the
+# full recorded size. Overridable with ?rscale= so the fps/sharpness curve can be measured without a
+# rebuild — every earlier data point was taken at the mobile 0.58 and is not comparable.
+var capture_render_scale := 1.0
 var _hud_dbg_lbl: Label = null
 ## ?mpdebug=1 / --mpdebug — peer sync health on screen. Exists because the whole netsync rewrite is
 ## INVISIBLE on a phone: a correctly-interpolated peer and one being held by a starved buffer look
@@ -261,6 +265,8 @@ func _ready() -> void:
 			mp_debug = true
 		if _query_flag("capture"):
 			capture_mode = true
+			capture_render_scale = clampf(_query_num("rscale", 1.0), 0.25, 1.0)
+			print("GOGI_CAPTURE render_scale=%.2f" % capture_render_scale)
 	elif _pending_world_url == "":
 		# Launch value. Skipped entirely on a runtime swap, or the command line would be adopted first
 		# and then immediately overwritten — harmless but it logs two different worlds per reload,
@@ -912,7 +918,16 @@ func _process(delta: float) -> void:
 	# fill-rate cut for mobile: the sustained camp lag is per-pixel 3D shading, so render the 3D at a lower
 	# internal resolution (bilinear-upscaled). 0.75->0.58 ground / 0.5->0.44 air — a big pixel-count cut a weak
 	# mobile GPU feels directly; barely visible with the 2D HUD at full res.
-	var want_scale := 0.44 if (active_vehicle != null and is_instance_valid(active_vehicle) and active_vehicle._airborne) else 0.58
+	# CAPTURE IS NOT A PHONE, and inheriting the phone's cut is where the blurry feed loop came from.
+	# The scales below are a deliberate fill-rate trade for a weak mobile GPU, but the recorder is a
+	# server rendering into a 360x780 video that the feed then displays FULL SCREEN — so at 0.58 the
+	# 3D was rasterized at 209x452 and stretched ~6x on the phone. That also explains why an earlier
+	# experiment found raising the capture resolution "barely visible": the outer size went up while
+	# this inner scale stayed at 0.58, so most of the added pixels were discarded before shading.
+	# capture_render_scale is a knob rather than a constant so arms can be measured against ONE build
+	# (?capture=1&rscale=0.75) instead of needing a rebuild per data point.
+	var want_scale := capture_render_scale if capture_mode else \
+		(0.44 if (active_vehicle != null and is_instance_valid(active_vehicle) and active_vehicle._airborne) else 0.58)
 	if not is_equal_approx(get_viewport().scaling_3d_scale, want_scale):
 		get_viewport().scaling_3d_scale = want_scale
 	if cam_rig and player:
@@ -2649,6 +2664,26 @@ func _query_flag(name: String) -> bool:
 		TYPE_STRING:
 			return String(v) == "1" or String(v) == "true"
 	return false
+
+
+# Numeric query parameter, with the same defensive typing as _query_flag.
+#
+# JavaScriptBridge.eval does NOT reliably hand back the type you asked for — a JS boolean arrives as
+# TYPE_INT, and that trap has silently disabled flags here before. A JS number can arrive as INT or
+# FLOAT depending on whether it happens to be integral, and as a STRING through some paths, so all
+# three are accepted and anything else falls back rather than reading as 0.
+func _query_num(name: String, fallback: float) -> float:
+	if not OS.has_feature("web"):
+		return fallback
+	var v = JavaScriptBridge.eval(
+		"(new URLSearchParams(window.location.search)).get('%s')" % name, true)
+	match typeof(v):
+		TYPE_INT, TYPE_FLOAT:
+			return float(v)
+		TYPE_STRING:
+			var t := String(v).strip_edges()
+			return float(t) if t.is_valid_float() else fallback
+	return fallback
 
 
 func _apply_cmdline_world() -> void:

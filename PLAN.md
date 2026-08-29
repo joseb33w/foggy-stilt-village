@@ -1,40 +1,14 @@
 # Goal
-Add a dragon to Heronwade: the **Mire Dragon**, a hulking boss creature roosting
-in a new bone-strewn lair in the far south-west bog. Pure world.json DATA on the
-existing rpg engine (no game-authored scripts — native tier preserved): the
-dragon stalks its roost, guards a hoard chest with a new
-top-tier weapon, and is wired into the rumor/bounty/discovery rule layer.
-(Originally authored as an aerial swooper; grounded after the Game-Feel + QA
-passes proved the engine's flyer stand-off ring makes melee engagement a
-spawn-time coin flip — see PR body.)
+Add a second dragon to The Dragon's Roost: a three-headed hydra dragon in blue-mixed-with-red scales (user request), Meshy-generated with the same G_DRAGON rig-lab clip set as the existing Mire Dragon.
 
 # Files to touch
-- `world.json` —
-  - new region **The Dragon's Roost** (cell [-7,10], world ~[-104,168], music: tension),
-  - roost cells dressed with bones / skulls / dead trees / rock scatter,
-  - lair cell: 1 `mire_dragon` boss (hp 700, dmg 20, height 2.2 -> ~4.6 m body,
-    grounded stalker — the aerial profile's stand-off ring proved a spawn-time
-    coin flip vs its own attack reach, per the Game-Feel pass; Meshy model
-    `models/meshy/mire_dragon.glb`), hoard chest (Dragonfang + 200 gold),
-  - `weapons` += **Dragonfang** (melee, dmg 72 — new top of the curve),
-  - rules: Mirewood rumor toast, roost-entry warning subtitle + shake, aggro
-    stinger (`enemy_detected_player`), half-HP enrage beat (`enemy_hp_crossed`),
-    kill payoff (bounty +300, xp +300, toast), discovery counter (explored max 12→13).
-- `models/meshy/mire_dragon.glb` — new Meshy-generated rigged swamp dragon
-  (G_DRAGON rig-lab clips idle/walk/flap/glide), decimated for mobile;
-  `models/meshy_assets.jsonl` metadata line appended.
-- `README.md` — world/weapons/quest sections updated for the new encounter.
+- `world.json` — dress cell [-6,10] (adjacent to the Mire Dragon's lair, inside The Dragon's Roost) as a second bone-strewn lair with the `hydra_dragon` enemy (hp 900, dmg 24, height 2.5) + a gold hoard chest; update the roost rumor/warn flavor; add `hydra_enrage` + `bounty_hydra` rules (350 bounty / 350 xp).
+- `models/meshy/hydra_dragon.glb` + `models/meshy_assets.jsonl` — new Meshy creature (delegated to the Meshy specialist).
+- `README.md` — Roost description, quests paragraph, credits line, play link.
+- `main.gd` — engine re-sync (template update, no game changes).
 
 # Verification approach
-qgcheck (graph unchanged — no new locks; must stay PASS), canonical verify.mjs
-on the export (packaging, GPU budget, rules-alive, character tri gate), frame
-critique of the roost, targeted checks: dragon spawns + engages, clips
-play, kill → bounty rule fires, chest grants Dragonfang. QA + Game-Feel
-specialist passes before ship.
+Re-export the Web (nothreads) build, run the canonical verify.mjs smoke harness, targeted check that the hydra cell streams its enemy with the new model (three heads + blue/red visible in a render), QA specialist final pass, deploy preview, PR + merge.
 
 # Out of scope
-- No changes to the campaign chain / goal (`rout_of_the_reeds` untouched — the
-  dragon is a side encounter; rules-layer only, no quests.json edit since the
-  quest chain is director-managed).
-- No rideable dragon mount (the request says "add a dragon in the game"; the
-  hostile roost encounter is the chosen reading — noted in PR body).
+No quest-chain changes (the dragons stay optional side encounters), no new weapons/items, no layout changes elsewhere in the world.

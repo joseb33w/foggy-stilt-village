@@ -7,7 +7,7 @@ pike pirates hold an anchorage across the Broad Murk bay, and the skull-masked
 Murk Reaver waits on a delta island. Drive the marsh buggy up the causeway, sail
 a skiff across the bay, or fly the Dragonfly seaplane from the southern strip.
 
-**Play:** https://preview.myapping.com/cloud-cimwbwzhmp76phh40et8/index.html
+**Play:** https://preview.myapping.com/cloud-nusrgc4jlryff4h2e2cr/index.html
 
 ## How to play
 - **Move:** left-side touch joystick (or WASD)
@@ -30,8 +30,10 @@ A 24×24-cell chunk-streamed open world (~384 m across):
 - **Dragonfly Strip** (south) — an airstrip with the Dragonfly seaplane.
 - **The Reaver's Delta** (south-east) — the boss island, reached by boat or plane.
 - **The Dragon's Roost** (far south-west) — a bone-strewn lair in the bog where
-  the **Mire Dragon** stalks: a hulking marsh dragon boss that guards a hoard
-  chest holding the Dragonfang.
+  TWO dragons stalk: the **Mire Dragon**, a hulking marsh dragon boss guarding a
+  hoard chest holding the Dragonfang, and the **Hydra Dragon**, a three-headed
+  terror in cobalt-blue and crimson-red scales roosting beside it over its own
+  gold hoard.
 
 ## Weapons
 A seven-piece arsenal, all data-driven: the Reed Torch (starter), Fisher's Gaff,
@@ -41,10 +43,10 @@ Chests at each camp carry the local faction's weapon; stronger finds auto-equip.
 
 ## Quests
 The chain runs *Village of Stilts* → *Bandits on the Causeway* → *Mire and
-Murk* → *Rout of the Reeds* (defeat the Murk Reaver). The Mire Dragon is an
-optional side encounter outside the chain — a rumor toasts in the Mirewood, and
-felling it pays 300 bounty and 300 xp. Thirteen named places toast as you
-discover them; a BOUNTY counter scores your kills.
+Murk* → *Rout of the Reeds* (defeat the Murk Reaver). The two dragons of the
+Roost are optional side encounters outside the chain — a rumor toasts in the
+Mirewood, and felling them pays 300 + 350 bounty and matching xp. Thirteen named
+places toast as you discover them; a BOUNTY counter scores your kills.
 
 ## Multiplayer
 The world is shared: everyone who opens the same game link lands in the same
@@ -61,8 +63,8 @@ the session is remembered across launches. For a private room, add
   weather, parametric structures, weapons catalog, enemy camps, world-level
   vehicles, rules/vars/HUD) and `quests.json`. No game-authored scripts — the
   build is native-player streamable.
-- Characters (heron villagers, the wanderer, the catfish, the Mire Dragon, and
-  the four camp enemy kinds) are Meshy-generated, rigged, web-optimized GLBs in `models/meshy/`,
+- Characters (heron villagers, the wanderer, the catfish, the two Roost dragons,
+  and the four camp enemy kinds) are Meshy-generated, rigged, web-optimized GLBs in `models/meshy/`,
   streamed at runtime (never packed into the `.pck`). Vehicles use Meshy
   multi-part bodies (rolling wheels, spinning prop) with parametric fallbacks.
 - NPC dialogue is spoken and answered live by the shared NPC brain
