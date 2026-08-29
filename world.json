@@ -18,8 +18,29 @@
   }
  },
  "sky": {
-  "time": "day",
-  "weather": "fog"
+  "loop": true,
+  "cycle": [
+   {
+    "time": "day",
+    "weather": "fog",
+    "seconds": 75
+   },
+   {
+    "time": "day",
+    "weather": "overcast",
+    "seconds": 15
+   },
+   {
+    "time": "day",
+    "weather": "storm",
+    "seconds": 55
+   },
+   {
+    "time": "day",
+    "weather": "rain",
+    "seconds": 15
+   }
+  ]
  },
  "terrain": {
   "amplitude": 2.2,
